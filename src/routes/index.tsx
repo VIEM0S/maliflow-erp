@@ -1,11 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
+import { Link, redirect } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 import { Boxes, Wallet, HandCoins, ShieldCheck, ArrowRight, Sparkles } from "lucide-react";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 
 export const Route = createFileRoute("/")({
+  ssr: false,
+  beforeLoad: async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) throw redirect({ to: "/dashboard" });
+  },
   head: () => ({
     meta: [
       { title: "Alpha ERP — L'ERP des commerces d'Afrique de l'Ouest" },
