@@ -261,6 +261,80 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          movement_type: Database["public"]["Enums"]["stock_movement_type"]
+          notes: string | null
+          product_id: string
+          quantity: number
+          reason: string | null
+          reference: string | null
+          store_id: string | null
+          tenant_id: string
+          unit_cost: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          movement_type: Database["public"]["Enums"]["stock_movement_type"]
+          notes?: string | null
+          product_id: string
+          quantity: number
+          reason?: string | null
+          reference?: string | null
+          store_id?: string | null
+          tenant_id: string
+          unit_cost?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          movement_type?: Database["public"]["Enums"]["stock_movement_type"]
+          notes?: string | null
+          product_id?: string
+          quantity?: number
+          reason?: string | null
+          reference?: string | null
+          store_id?: string | null
+          tenant_id?: string
+          unit_cost?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_stock_balances"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "stock_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       stores: {
         Row: {
           address: string | null
@@ -361,9 +435,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      product_stock_balances: {
+        Row: {
+          min_stock: number | null
+          name: string | null
+          on_hand: number | null
+          product_id: string | null
+          sku: string | null
+          stock_value: number | null
+          tenant_id: string | null
+          unit: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      get_product_stock: { Args: { _product_id: string }; Returns: number }
       has_tenant_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -380,6 +475,7 @@ export type Database = {
     }
     Enums: {
       app_role: "super_admin" | "owner" | "manager" | "cashier"
+      stock_movement_type: "in" | "out" | "adjustment"
       tenant_status: "trialing" | "active" | "suspended" | "cancelled"
     }
     CompositeTypes: {
@@ -509,6 +605,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["super_admin", "owner", "manager", "cashier"],
+      stock_movement_type: ["in", "out", "adjustment"],
       tenant_status: ["trialing", "active", "suspended", "cancelled"],
     },
   },
