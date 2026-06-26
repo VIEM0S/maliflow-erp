@@ -504,6 +504,41 @@ export type Database = {
           },
         ]
       }
+      tenant_inventory_permissions: {
+        Row: {
+          allowed_roles: Database["public"]["Enums"]["app_role"][]
+          created_at: string
+          id: string
+          permission: Database["public"]["Enums"]["inventory_permission"]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          allowed_roles?: Database["public"]["Enums"]["app_role"][]
+          created_at?: string
+          id?: string
+          permission: Database["public"]["Enums"]["inventory_permission"]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          allowed_roles?: Database["public"]["Enums"]["app_role"][]
+          created_at?: string
+          id?: string
+          permission?: Database["public"]["Enums"]["inventory_permission"]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_inventory_permissions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           address: string | null
@@ -589,6 +624,14 @@ export type Database = {
       }
     }
     Functions: {
+      can_inventory: {
+        Args: {
+          _permission: Database["public"]["Enums"]["inventory_permission"]
+          _tenant_id: string
+          _user_id: string
+        }
+        Returns: boolean
+      }
       close_inventory_count: { Args: { _count_id: string }; Returns: number }
       get_product_stock: { Args: { _product_id: string }; Returns: number }
       has_tenant_role: {
@@ -609,6 +652,12 @@ export type Database = {
     Enums: {
       app_role: "super_admin" | "owner" | "manager" | "cashier"
       inventory_count_status: "draft" | "in_progress" | "closed" | "cancelled"
+      inventory_permission:
+        | "create"
+        | "start"
+        | "close"
+        | "cancel"
+        | "adjust_item"
       stock_movement_type: "in" | "out" | "adjustment"
       tenant_status: "trialing" | "active" | "suspended" | "cancelled"
     }
@@ -740,6 +789,13 @@ export const Constants = {
     Enums: {
       app_role: ["super_admin", "owner", "manager", "cashier"],
       inventory_count_status: ["draft", "in_progress", "closed", "cancelled"],
+      inventory_permission: [
+        "create",
+        "start",
+        "close",
+        "cancel",
+        "adjust_item",
+      ],
       stock_movement_type: ["in", "out", "adjustment"],
       tenant_status: ["trialing", "active", "suspended", "cancelled"],
     },
