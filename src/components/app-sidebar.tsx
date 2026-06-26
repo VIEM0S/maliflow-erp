@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Package,
   Boxes,
+  ClipboardList,
   Users,
   Truck,
   HandCoins,
@@ -47,6 +48,7 @@ export function AppSidebar({ tenantName, role }: { tenantName: string; role: App
     { key: "quotes", label: t("nav.quotes"), to: "/quotes", icon: FileText, roles: ["owner", "manager"] },
     { key: "products", label: t("nav.products"), to: "/products", icon: Package, roles: ["owner", "manager"] },
     { key: "inventory", label: t("nav.inventory"), to: "/inventory", icon: Boxes, roles: ["owner", "manager"] },
+    { key: "inventory-counts", label: t("nav.inventoryCounts"), to: "/inventory-counts", icon: ClipboardList, roles: ["owner", "manager"] },
   ];
   const ops: NavItem[] = [
     { key: "customers", label: t("nav.customers"), to: "/customers", icon: Users, roles: ["owner", "manager"] },
