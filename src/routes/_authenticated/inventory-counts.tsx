@@ -67,6 +67,31 @@ const db = supabase as unknown as {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
+type InvPermName = "create" | "start" | "close" | "cancel" | "adjust_item";
+type InvPerms = Record<InvPermName, boolean>;
+
+function useInventoryPerms(tenantId: string, role: AppRole): InvPerms {
+  const { data } = useQuery({
+    queryKey: ["tenant-inventory-permissions", tenantId],
+    queryFn: async () => {
+      const { data, error } = await db.from("tenant_inventory_permissions")
+        .select("permission, allowed_roles")
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data ?? []) as { permission: InvPermName; allowed_roles: AppRole[] }[];
+    },
+  });
+  return useMemo(() => {
+    const ownerLike = role === "owner" || role === "super_admin";
+    const base: InvPerms = { create: ownerLike, start: ownerLike, close: ownerLike, cancel: ownerLike, adjust_item: ownerLike };
+    if (ownerLike) return base;
+    for (const r of data ?? []) {
+      if ((r.allowed_roles ?? []).includes(role)) base[r.permission] = true;
+    }
+    return base;
+  }, [data, role]);
+}
+
 function statusVariant(s: CountStatus): "default" | "secondary" | "outline" | "destructive" {
   if (s === "closed") return "default";
   if (s === "in_progress") return "secondary";
@@ -76,7 +101,7 @@ function statusVariant(s: CountStatus): "default" | "secondary" | "outline" | "d
 
 function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; role: AppRole; currency: string }) {
   const t = useT();
-  const canEdit = role === "owner" || role === "manager" || role === "super_admin";
+  const perms = useInventoryPerms(tenantId, role);
   const canDelete = role === "owner" || role === "super_admin";
   const qc = useQueryClient();
 
@@ -101,7 +126,8 @@ function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; r
         countId={openId}
         tenantId={tenantId}
         currency={currency}
-        canEdit={canEdit}
+        perms={perms}
+        canDelete={canDelete}
         onBack={() => setOpenId(null)}
       />
     );
@@ -117,7 +143,7 @@ function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; r
           </h1>
           <p className="text-sm text-muted-foreground">{t("counts.sub")}</p>
         </div>
-        {canEdit && (
+        {perms.create && (
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" /> {t("counts.new")}
           </Button>
@@ -244,8 +270,8 @@ function CreateDialog({
 type ItemFilter = "all" | "variance" | "pending";
 
 function CountDetail({
-  countId, tenantId, currency, canEdit, onBack,
-}: { countId: string; tenantId: string; currency: string; canEdit: boolean; onBack: () => void }) {
+  countId, tenantId, currency, perms, canDelete, onBack,
+}: { countId: string; tenantId: string; currency: string; perms: InvPerms; canDelete: boolean; onBack: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -404,23 +430,23 @@ function CountDetail({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canEdit && isDraft && (
+          {perms.start && isDraft && (
             <Button onClick={() => startMut.mutate()} disabled={startMut.isPending} className="gap-2">
               {startMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {t("counts.start")}
             </Button>
           )}
-          {canEdit && isInProgress && (
-            <>
-              <Button variant="outline" onClick={() => setConfirmCancel(true)} className="gap-2">
-                <XCircle className="h-4 w-4" /> {t("counts.cancel")}
-              </Button>
-              <Button onClick={() => setConfirmClose(true)} className="gap-2">
-                <CheckCircle2 className="h-4 w-4" /> {t("counts.close")}
-              </Button>
-            </>
+          {isInProgress && perms.cancel && (
+            <Button variant="outline" onClick={() => setConfirmCancel(true)} className="gap-2">
+              <XCircle className="h-4 w-4" /> {t("counts.cancel")}
+            </Button>
           )}
-          {canEdit && (isDraft || count?.status === "cancelled") && (
+          {isInProgress && perms.close && (
+            <Button onClick={() => setConfirmClose(true)} className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> {t("counts.close")}
+            </Button>
+          )}
+          {canDelete && (isDraft || count?.status === "cancelled") && (
             <Button variant="outline" className="gap-2 text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="h-4 w-4" /> {t("counts.delete")}
             </Button>
@@ -460,7 +486,7 @@ function CountDetail({
                 <TabsTrigger value="variance">{t("counts.filter.variance")}</TabsTrigger>
               </TabsList>
             </Tabs>
-            {canEdit && isInProgress && (
+            {isInProgress && perms.adjust_item && (
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => bulkSet("zero")}>{t("counts.fillAll")}</Button>
                 <Button size="sm" variant="outline" onClick={() => bulkSet("match")}>{t("counts.matchSystem")}</Button>
@@ -487,7 +513,7 @@ function CountDetail({
                   <ItemRow
                     key={it.id}
                     item={it}
-                    canEdit={canEdit && isInProgress}
+                    canEdit={isInProgress && perms.adjust_item}
                     onSave={(v) => updateItem(it.id, v)}
                   />
                 ))}
