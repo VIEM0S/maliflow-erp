@@ -270,8 +270,8 @@ function CreateDialog({
 type ItemFilter = "all" | "variance" | "pending";
 
 function CountDetail({
-  countId, tenantId, currency, canEdit, onBack,
-}: { countId: string; tenantId: string; currency: string; canEdit: boolean; onBack: () => void }) {
+  countId, tenantId, currency, perms, canDelete, onBack,
+}: { countId: string; tenantId: string; currency: string; perms: InvPerms; canDelete: boolean; onBack: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -430,23 +430,23 @@ function CountDetail({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canEdit && isDraft && (
+          {perms.start && isDraft && (
             <Button onClick={() => startMut.mutate()} disabled={startMut.isPending} className="gap-2">
               {startMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {t("counts.start")}
             </Button>
           )}
-          {canEdit && isInProgress && (
-            <>
-              <Button variant="outline" onClick={() => setConfirmCancel(true)} className="gap-2">
-                <XCircle className="h-4 w-4" /> {t("counts.cancel")}
-              </Button>
-              <Button onClick={() => setConfirmClose(true)} className="gap-2">
-                <CheckCircle2 className="h-4 w-4" /> {t("counts.close")}
-              </Button>
-            </>
+          {isInProgress && perms.cancel && (
+            <Button variant="outline" onClick={() => setConfirmCancel(true)} className="gap-2">
+              <XCircle className="h-4 w-4" /> {t("counts.cancel")}
+            </Button>
           )}
-          {canEdit && (isDraft || count?.status === "cancelled") && (
+          {isInProgress && perms.close && (
+            <Button onClick={() => setConfirmClose(true)} className="gap-2">
+              <CheckCircle2 className="h-4 w-4" /> {t("counts.close")}
+            </Button>
+          )}
+          {canDelete && (isDraft || count?.status === "cancelled") && (
             <Button variant="outline" className="gap-2 text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="h-4 w-4" /> {t("counts.delete")}
             </Button>
@@ -486,7 +486,7 @@ function CountDetail({
                 <TabsTrigger value="variance">{t("counts.filter.variance")}</TabsTrigger>
               </TabsList>
             </Tabs>
-            {canEdit && isInProgress && (
+            {isInProgress && perms.adjust_item && (
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => bulkSet("zero")}>{t("counts.fillAll")}</Button>
                 <Button size="sm" variant="outline" onClick={() => bulkSet("match")}>{t("counts.matchSystem")}</Button>
@@ -513,7 +513,7 @@ function CountDetail({
                   <ItemRow
                     key={it.id}
                     item={it}
-                    canEdit={canEdit && isInProgress}
+                    canEdit={isInProgress && perms.adjust_item}
                     onSave={(v) => updateItem(it.id, v)}
                   />
                 ))}
