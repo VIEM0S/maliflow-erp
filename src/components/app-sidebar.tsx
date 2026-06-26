@@ -5,6 +5,7 @@ import {
   Package,
   Boxes,
   ClipboardList,
+  ShieldCheck,
   Users,
   Truck,
   HandCoins,
@@ -58,6 +59,7 @@ export function AppSidebar({ tenantName, role }: { tenantName: string; role: App
   ];
   const adv: NavItem[] = [
     { key: "analytics", label: t("nav.analytics"), to: "/analytics", icon: BarChart3, roles: ["owner"] },
+    { key: "permissions", label: t("nav.permissions"), to: "/permissions", icon: ShieldCheck, roles: ["owner"] },
     { key: "settings", label: t("nav.settings"), to: "/settings", icon: Settings, roles: ["owner"] },
   ];
 
