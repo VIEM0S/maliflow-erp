@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedProductsRouteImport } from './routes/_authenticated/products'
+import { Route as AuthenticatedPermissionsRouteImport } from './routes/_authenticated/permissions'
 import { Route as AuthenticatedInventoryCountsRouteImport } from './routes/_authenticated/inventory-counts'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -42,6 +43,12 @@ const AuthenticatedProductsRoute = AuthenticatedProductsRouteImport.update({
   path: '/products',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPermissionsRoute =
+  AuthenticatedPermissionsRouteImport.update({
+    id: '/permissions',
+    path: '/permissions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedInventoryCountsRoute =
   AuthenticatedInventoryCountsRouteImport.update({
     id: '/inventory-counts',
@@ -66,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/inventory-counts': typeof AuthenticatedInventoryCountsRoute
+  '/permissions': typeof AuthenticatedPermissionsRoute
   '/products': typeof AuthenticatedProductsRoute
 }
 export interface FileRoutesByTo {
@@ -75,6 +83,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/inventory': typeof AuthenticatedInventoryRoute
   '/inventory-counts': typeof AuthenticatedInventoryCountsRoute
+  '/permissions': typeof AuthenticatedPermissionsRoute
   '/products': typeof AuthenticatedProductsRoute
 }
 export interface FileRoutesById {
@@ -86,6 +95,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
   '/_authenticated/inventory-counts': typeof AuthenticatedInventoryCountsRoute
+  '/_authenticated/permissions': typeof AuthenticatedPermissionsRoute
   '/_authenticated/products': typeof AuthenticatedProductsRoute
 }
 export interface FileRouteTypes {
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inventory'
     | '/inventory-counts'
+    | '/permissions'
     | '/products'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/inventory'
     | '/inventory-counts'
+    | '/permissions'
     | '/products'
   id:
     | '__root__'
@@ -116,6 +128,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/inventory'
     | '/_authenticated/inventory-counts'
+    | '/_authenticated/permissions'
     | '/_authenticated/products'
   fileRoutesById: FileRoutesById
 }
@@ -163,6 +176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/permissions': {
+      id: '/_authenticated/permissions'
+      path: '/permissions'
+      fullPath: '/permissions'
+      preLoaderRoute: typeof AuthenticatedPermissionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/inventory-counts': {
       id: '/_authenticated/inventory-counts'
       path: '/inventory-counts'
@@ -191,6 +211,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
   AuthenticatedInventoryCountsRoute: typeof AuthenticatedInventoryCountsRoute
+  AuthenticatedPermissionsRoute: typeof AuthenticatedPermissionsRoute
   AuthenticatedProductsRoute: typeof AuthenticatedProductsRoute
 }
 
@@ -198,6 +219,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
   AuthenticatedInventoryCountsRoute: AuthenticatedInventoryCountsRoute,
+  AuthenticatedPermissionsRoute: AuthenticatedPermissionsRoute,
   AuthenticatedProductsRoute: AuthenticatedProductsRoute,
 }
 
