@@ -67,6 +67,31 @@ const db = supabase as unknown as {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
+type InvPermName = "create" | "start" | "close" | "cancel" | "adjust_item";
+type InvPerms = Record<InvPermName, boolean>;
+
+function useInventoryPerms(tenantId: string, role: AppRole): InvPerms {
+  const { data } = useQuery({
+    queryKey: ["tenant-inventory-permissions", tenantId],
+    queryFn: async () => {
+      const { data, error } = await db.from("tenant_inventory_permissions")
+        .select("permission, allowed_roles")
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data ?? []) as { permission: InvPermName; allowed_roles: AppRole[] }[];
+    },
+  });
+  return useMemo(() => {
+    const ownerLike = role === "owner" || role === "super_admin";
+    const base: InvPerms = { create: ownerLike, start: ownerLike, close: ownerLike, cancel: ownerLike, adjust_item: ownerLike };
+    if (ownerLike) return base;
+    for (const r of data ?? []) {
+      if ((r.allowed_roles ?? []).includes(role)) base[r.permission] = true;
+    }
+    return base;
+  }, [data, role]);
+}
+
 function statusVariant(s: CountStatus): "default" | "secondary" | "outline" | "destructive" {
   if (s === "closed") return "default";
   if (s === "in_progress") return "secondary";
@@ -76,7 +101,7 @@ function statusVariant(s: CountStatus): "default" | "secondary" | "outline" | "d
 
 function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; role: AppRole; currency: string }) {
   const t = useT();
-  const canEdit = role === "owner" || role === "manager" || role === "super_admin";
+  const perms = useInventoryPerms(tenantId, role);
   const canDelete = role === "owner" || role === "super_admin";
   const qc = useQueryClient();
 
@@ -101,7 +126,8 @@ function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; r
         countId={openId}
         tenantId={tenantId}
         currency={currency}
-        canEdit={canEdit}
+        perms={perms}
+        canDelete={canDelete}
         onBack={() => setOpenId(null)}
       />
     );
@@ -117,7 +143,7 @@ function InventoryCountsPage({ tenantId, role, currency }: { tenantId: string; r
           </h1>
           <p className="text-sm text-muted-foreground">{t("counts.sub")}</p>
         </div>
-        {canEdit && (
+        {perms.create && (
           <Button onClick={() => setCreateOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" /> {t("counts.new")}
           </Button>
