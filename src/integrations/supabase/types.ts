@@ -115,6 +115,137 @@ export type Database = {
           },
         ]
       }
+      inventory_count_items: {
+        Row: {
+          count_id: string
+          counted_at: string | null
+          counted_by: string | null
+          created_at: string
+          id: string
+          physical_qty: number | null
+          product_id: string
+          system_qty: number
+          tenant_id: string
+          updated_at: string
+          variance: number | null
+        }
+        Insert: {
+          count_id: string
+          counted_at?: string | null
+          counted_by?: string | null
+          created_at?: string
+          id?: string
+          physical_qty?: number | null
+          product_id: string
+          system_qty?: number
+          tenant_id: string
+          updated_at?: string
+          variance?: number | null
+        }
+        Update: {
+          count_id?: string
+          counted_at?: string | null
+          counted_by?: string | null
+          created_at?: string
+          id?: string
+          physical_qty?: number | null
+          product_id?: string
+          system_qty?: number
+          tenant_id?: string
+          updated_at?: string
+          variance?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_count_items_count_id_fkey"
+            columns: ["count_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_counts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_count_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "product_stock_balances"
+            referencedColumns: ["product_id"]
+          },
+          {
+            foreignKeyName: "inventory_count_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_count_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_counts: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          reference: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["inventory_count_status"]
+          store_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reference: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["inventory_count_status"]
+          store_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          reference?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["inventory_count_status"]
+          store_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_counts_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_counts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       memberships: {
         Row: {
           created_at: string
@@ -458,6 +589,7 @@ export type Database = {
       }
     }
     Functions: {
+      close_inventory_count: { Args: { _count_id: string }; Returns: number }
       get_product_stock: { Args: { _product_id: string }; Returns: number }
       has_tenant_role: {
         Args: {
@@ -472,9 +604,11 @@ export type Database = {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean
       }
+      start_inventory_count: { Args: { _count_id: string }; Returns: number }
     }
     Enums: {
       app_role: "super_admin" | "owner" | "manager" | "cashier"
+      inventory_count_status: "draft" | "in_progress" | "closed" | "cancelled"
       stock_movement_type: "in" | "out" | "adjustment"
       tenant_status: "trialing" | "active" | "suspended" | "cancelled"
     }
@@ -605,6 +739,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["super_admin", "owner", "manager", "cashier"],
+      inventory_count_status: ["draft", "in_progress", "closed", "cancelled"],
       stock_movement_type: ["in", "out", "adjustment"],
       tenant_status: ["trialing", "active", "suspended", "cancelled"],
     },
