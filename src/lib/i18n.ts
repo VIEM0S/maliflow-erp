@@ -210,6 +210,13 @@ const dict = {
     "perms.perm.adjust_item": "Saisir / modifier les quantités physiques",
     "perms.saved": "Permissions mises à jour",
     "perms.ownerOnly": "Seul le Propriétaire peut modifier les permissions.",
+    "perms.sim.title": "Simulation des droits",
+    "perms.sim.sub": "Prévisualisez les actions disponibles pour un rôle avant d'enregistrer.",
+    "perms.sim.role": "Rôle simulé",
+    "perms.sim.allowed": "Autorisé",
+    "perms.sim.denied": "Refusé",
+    "perms.sim.dirtyHint": "Aperçu basé sur les modifications non enregistrées.",
+    "perms.sim.savedHint": "Aperçu basé sur la configuration enregistrée.",
   },
   en: {
     "app.name": "Alpha ERP",
@@ -398,6 +405,13 @@ const dict = {
     "perms.perm.adjust_item": "Enter / edit physical quantities",
     "perms.saved": "Permissions updated",
     "perms.ownerOnly": "Only the Owner can change permissions.",
+    "perms.sim.title": "Permission simulator",
+    "perms.sim.sub": "Preview which actions a role will see before saving.",
+    "perms.sim.role": "Simulated role",
+    "perms.sim.allowed": "Allowed",
+    "perms.sim.denied": "Denied",
+    "perms.sim.dirtyHint": "Preview reflects unsaved changes.",
+    "perms.sim.savedHint": "Preview reflects the saved configuration.",
   },
 } as const;
 

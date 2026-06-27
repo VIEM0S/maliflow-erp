@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -25,6 +28,7 @@ export const Route = createFileRoute("/_authenticated/permissions")({
 type InventoryPermission = "create" | "start" | "close" | "cancel" | "adjust_item";
 const PERMISSIONS: InventoryPermission[] = ["create", "start", "close", "cancel", "adjust_item"];
 const ROLES: Exclude<AppRole, "owner" | "super_admin">[] = ["manager", "cashier"];
+const SIM_ROLES: AppRole[] = ["owner", "manager", "cashier"];
 
 type Row = { id: string; tenant_id: string; permission: InventoryPermission; allowed_roles: AppRole[] };
 
@@ -47,6 +51,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   });
 
   const [draft, setDraft] = useState<Record<InventoryPermission, Set<AppRole>>>(() => emptyDraft());
+  const [simRole, setSimRole] = useState<AppRole>("manager");
 
   useEffect(() => {
     if (!data) return;
@@ -98,6 +103,11 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     });
   };
 
+  const simAllows = (perm: InventoryPermission): boolean => {
+    if (simRole === "super_admin" || simRole === "owner") return true;
+    return draft[perm]?.has(simRole) ?? false;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -125,6 +135,65 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       <Card className="p-4 text-sm text-muted-foreground space-y-1">
         <p>• {t("perms.ownerNote")}</p>
         <p>• {t("perms.cashierNote")}</p>
+      </Card>
+
+      <Card className="p-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <Eye className="h-4 w-4 text-primary" /> {t("perms.sim.title")}
+            </h2>
+            <p className="text-xs text-muted-foreground">{t("perms.sim.sub")}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {dirty ? t("perms.sim.dirtyHint") : t("perms.sim.savedHint")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">{t("perms.sim.role")}</span>
+            <Select value={simRole} onValueChange={(v) => setSimRole(v as AppRole)}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SIM_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r === "owner" ? t("role.owner") : t(`perms.role.${r}` as never)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {PERMISSIONS.map((perm) => {
+            const ok = simAllows(perm);
+            return (
+              <div
+                key={perm}
+                className={`flex items-center justify-between rounded-md border p-2.5 text-sm ${
+                  ok
+                    ? "border-emerald-300/50 bg-emerald-50/50 dark:bg-emerald-900/10"
+                    : "border-border bg-muted/30 opacity-70"
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{t(`perms.perm.${perm}` as never)}</div>
+                  <div className="text-[11px] font-mono text-muted-foreground">{perm}</div>
+                </div>
+                {ok ? (
+                  <Badge variant="default" className="gap-1 bg-emerald-600 hover:bg-emerald-600">
+                    <Check className="h-3 w-3" /> {t("perms.sim.allowed")}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1 text-muted-foreground">
+                    <XIcon className="h-3 w-3" /> {t("perms.sim.denied")}
+                  </Badge>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </Card>
 
       <Card className="overflow-hidden">
