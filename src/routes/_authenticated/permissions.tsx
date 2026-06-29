@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -9,6 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -19,6 +24,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useT } from "@/lib/i18n";
 import type { AppRole } from "@/hooks/use-tenant";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/permissions")({
   head: () => ({ meta: [{ title: "Permissions — Alpha ERP" }] }),
@@ -31,12 +37,21 @@ const ROLES: Exclude<AppRole, "owner" | "super_admin">[] = ["manager", "cashier"
 const SIM_ROLES: AppRole[] = ["owner", "manager", "cashier"];
 
 type Row = { id: string; tenant_id: string; permission: InventoryPermission; allowed_roles: AppRole[] };
+type Preset = {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  description: string | null;
+  payload: Partial<Record<InventoryPermission, AppRole[]>>;
+  updated_at: string;
+};
 
 const db = supabase as unknown as { from: (t: string) => any };
 
 function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }) {
   const t = useT();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const canEdit = role === "owner" || role === "super_admin";
 
   const { data, isLoading } = useQuery({
@@ -108,6 +123,82 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     return draft[perm]?.has(simRole) ?? false;
   };
 
+  // ----- Presets (cross-tenant, scoped per user) -----
+  const presetsQ = useQuery({
+    queryKey: ["inventory-permission-presets", user?.id],
+    enabled: !!user?.id,
+    queryFn: async (): Promise<Preset[]> => {
+      const { data, error } = await db.from("inventory_permission_presets")
+        .select("*").order("updated_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Preset[];
+    },
+  });
+
+  const draftToPayload = (): Record<string, AppRole[]> => {
+    const out: Record<string, AppRole[]> = {};
+    for (const p of PERMISSIONS) out[p] = Array.from(draft[p] ?? new Set<AppRole>());
+    return out;
+  };
+
+  const applyPreset = (p: Preset) => {
+    const next = emptyDraft();
+    for (const perm of PERMISSIONS) {
+      next[perm] = new Set((p.payload?.[perm] ?? []) as AppRole[]);
+    }
+    setDraft(next);
+    toast.success(t("perms.presets.applied"));
+  };
+
+  const [dlgOpen, setDlgOpen] = useState(false);
+  const [pName, setPName] = useState("");
+  const [pDesc, setPDesc] = useState("");
+
+  const createPresetMut = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const { error } = await db.from("inventory_permission_presets").insert({
+        owner_user_id: user.id,
+        name: pName.trim(),
+        description: pDesc.trim() || null,
+        payload: draftToPayload(),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(t("perms.presets.saved"));
+      setDlgOpen(false); setPName(""); setPDesc("");
+      qc.invalidateQueries({ queryKey: ["inventory-permission-presets", user?.id] });
+    },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const updatePresetMut = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from("inventory_permission_presets")
+        .update({ payload: draftToPayload() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(t("perms.presets.updated"));
+      qc.invalidateQueries({ queryKey: ["inventory-permission-presets", user?.id] });
+    },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
+  const deletePresetMut = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from("inventory_permission_presets").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(t("perms.presets.deleted"));
+      qc.invalidateQueries({ queryKey: ["inventory-permission-presets", user?.id] });
+    },
+    onError: (e: { message: string }) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -135,6 +226,109 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       <Card className="p-4 text-sm text-muted-foreground space-y-1">
         <p>• {t("perms.ownerNote")}</p>
         <p>• {t("perms.cashierNote")}</p>
+      </Card>
+
+      <Card className="p-4 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <Bookmark className="h-4 w-4 text-primary" /> {t("perms.presets.title")}
+            </h2>
+            <p className="text-xs text-muted-foreground">{t("perms.presets.sub")}</p>
+          </div>
+          {canEdit && (
+            <Dialog open={dlgOpen} onOpenChange={setDlgOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" /> {t("perms.presets.save")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("perms.presets.save")}</DialogTitle>
+                  <DialogDescription>{t("perms.presets.sub")}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium">{t("perms.presets.name")}</label>
+                    <Input value={pName} onChange={(e) => setPName(e.target.value)} placeholder="Standard quincaillerie" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium">{t("perms.presets.description")}</label>
+                    <Textarea value={pDesc} onChange={(e) => setPDesc(e.target.value)} rows={2} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setDlgOpen(false)}>{t("perms.presets.cancel")}</Button>
+                  <Button
+                    onClick={() => createPresetMut.mutate()}
+                    disabled={!pName.trim() || createPresetMut.isPending}
+                    className="gap-2"
+                  >
+                    {createPresetMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {t("perms.presets.create")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+
+        {presetsQ.isLoading ? (
+          <div className="flex items-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading")}
+          </div>
+        ) : (presetsQ.data?.length ?? 0) === 0 ? (
+          <p className="text-sm text-muted-foreground italic">{t("perms.presets.empty")}</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {presetsQ.data!.map((p) => (
+              <div key={p.id} className="flex items-start justify-between gap-2 rounded-md border p-3">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">{p.name}</div>
+                  {p.description && (
+                    <div className="truncate text-xs text-muted-foreground">{p.description}</div>
+                  )}
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {PERMISSIONS.map((perm) => {
+                      const roles = (p.payload?.[perm] ?? []) as AppRole[];
+                      if (roles.length === 0) return null;
+                      return (
+                        <Badge key={perm} variant="outline" className="text-[10px]">
+                          {perm}: {roles.join(",")}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <Button size="sm" variant="secondary" className="h-7 gap-1" onClick={() => applyPreset(p)} disabled={!canEdit}>
+                    <Download className="h-3 w-3" /> {t("perms.presets.apply")}
+                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button
+                        size="sm" variant="outline" className="h-7 gap-1"
+                        onClick={() => updatePresetMut.mutate(p.id)}
+                        disabled={updatePresetMut.isPending}
+                      >
+                        <Save className="h-3 w-3" /> {t("perms.presets.update")}
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" className="h-7 gap-1 text-destructive hover:text-destructive"
+                        onClick={() => {
+                          if (confirm(t("perms.presets.confirmDelete"))) deletePresetMut.mutate(p.id);
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" /> {t("perms.presets.delete")}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card className="p-4 space-y-4">
