@@ -246,6 +246,36 @@ export type Database = {
           },
         ]
       }
+      inventory_permission_presets: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_user_id: string
+          payload: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          owner_user_id: string
+          payload?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          owner_user_id?: string
+          payload?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       memberships: {
         Row: {
           created_at: string
