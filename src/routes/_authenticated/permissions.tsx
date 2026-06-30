@@ -294,7 +294,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     enabled: canSeeAudit && !!tenantId,
     queryFn: async (): Promise<AuditRow[]> => {
       const { data, error } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,metadata,created_at")
+        .select("id,action,entity,entity_id,user_id,metadata,ip_address,created_at")
         .eq("tenant_id", tenantId)
         .eq("entity", "inventory_permission_preset")
         .order("created_at", { ascending: false })
@@ -303,6 +303,8 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       return (data ?? []) as AuditRow[];
     },
   });
+
+  const [selectedAudit, setSelectedAudit] = useState<AuditRow | null>(null);
 
   const actionLabel = (action: string): string => {
     const key = action.replace(/^preset\./, "") as PresetAuditAction;
