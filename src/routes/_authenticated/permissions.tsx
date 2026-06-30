@@ -435,7 +435,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                     <>
                       <Button
                         size="sm" variant="outline" className="h-7 gap-1"
-                        onClick={() => updatePresetMut.mutate({ id: p.id, name: p.name })}
+                        onClick={() => updatePresetMut.mutate({ id: p.id, name: p.name, payload: p.payload })}
                         disabled={updatePresetMut.isPending}
                       >
                         <Save className="h-3 w-3" /> {t("perms.presets.update")}
@@ -443,7 +443,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                       <Button
                         size="sm" variant="ghost" className="h-7 gap-1 text-destructive hover:text-destructive"
                         onClick={() => {
-                          if (confirm(t("perms.presets.confirmDelete"))) deletePresetMut.mutate({ id: p.id, name: p.name });
+                          if (confirm(t("perms.presets.confirmDelete"))) deletePresetMut.mutate({ id: p.id, name: p.name, payload: p.payload });
                         }}
                       >
                         <Trash2 className="h-3 w-3" /> {t("perms.presets.delete")}
