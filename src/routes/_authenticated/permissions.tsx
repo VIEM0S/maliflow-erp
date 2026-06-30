@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -17,6 +17,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -52,13 +55,48 @@ type AuditRow = {
   entity: string | null;
   entity_id: string | null;
   user_id: string | null;
-  metadata: { preset_name?: string; preset_id?: string } | null;
+  metadata: {
+    preset_name?: string;
+    preset_id?: string;
+    before?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    after?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    changed?: InventoryPermission[];
+  } | null;
+  ip_address: string | null;
   created_at: string;
 };
 
 type PresetAuditAction = "create" | "update" | "delete" | "apply";
 
 const db = supabase as unknown as { from: (t: string) => any };
+
+let cachedIp: string | null | undefined;
+async function getClientIp(): Promise<string | null> {
+  if (cachedIp !== undefined) return cachedIp;
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    const j = (await res.json()) as { ip?: string };
+    cachedIp = j.ip ?? null;
+  } catch {
+    cachedIp = null;
+  }
+  return cachedIp;
+}
+
+function diffMatrix(
+  before: Partial<Record<InventoryPermission, AppRole[]>> | null | undefined,
+  after: Partial<Record<InventoryPermission, AppRole[]>> | null | undefined,
+): InventoryPermission[] {
+  const changed: InventoryPermission[] = [];
+  for (const p of PERMISSIONS) {
+    const a = new Set((before?.[p] ?? []) as AppRole[]);
+    const b = new Set((after?.[p] ?? []) as AppRole[]);
+    let same = a.size === b.size;
+    if (same) for (const v of a) if (!b.has(v)) { same = false; break; }
+    if (!same) changed.push(p);
+  }
+  return changed;
+}
 
 function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }) {
   const t = useT();
