@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -17,6 +17,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -52,13 +55,48 @@ type AuditRow = {
   entity: string | null;
   entity_id: string | null;
   user_id: string | null;
-  metadata: { preset_name?: string; preset_id?: string } | null;
+  metadata: {
+    preset_name?: string;
+    preset_id?: string;
+    before?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    after?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    changed?: InventoryPermission[];
+  } | null;
+  ip_address: string | null;
   created_at: string;
 };
 
 type PresetAuditAction = "create" | "update" | "delete" | "apply";
 
 const db = supabase as unknown as { from: (t: string) => any };
+
+let cachedIp: string | null | undefined;
+async function getClientIp(): Promise<string | null> {
+  if (cachedIp !== undefined) return cachedIp;
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    const j = (await res.json()) as { ip?: string };
+    cachedIp = j.ip ?? null;
+  } catch {
+    cachedIp = null;
+  }
+  return cachedIp;
+}
+
+function diffMatrix(
+  before: Partial<Record<InventoryPermission, AppRole[]>> | null | undefined,
+  after: Partial<Record<InventoryPermission, AppRole[]>> | null | undefined,
+): InventoryPermission[] {
+  const changed: InventoryPermission[] = [];
+  for (const p of PERMISSIONS) {
+    const a = new Set((before?.[p] ?? []) as AppRole[]);
+    const b = new Set((after?.[p] ?? []) as AppRole[]);
+    let same = a.size === b.size;
+    if (same) for (const v of a) if (!b.has(v)) { same = false; break; }
+    if (!same) changed.push(p);
+  }
+  return changed;
+}
 
 function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }) {
   const t = useT();
@@ -70,15 +108,24 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const logPresetAction = async (
     action: PresetAuditAction,
     preset: { id: string; name: string },
+    snapshots?: {
+      before?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+      after?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    },
   ) => {
     if (!user?.id) return;
+    const before = snapshots?.before ?? null;
+    const after = snapshots?.after ?? null;
+    const changed = diffMatrix(before, after);
+    const ip = await getClientIp();
     await db.from("audit_logs").insert({
       tenant_id: tenantId,
       user_id: user.id,
       action: `preset.${action}`,
       entity: "inventory_permission_preset",
       entity_id: preset.id,
-      metadata: { preset_name: preset.name, preset_id: preset.id },
+      metadata: { preset_name: preset.name, preset_id: preset.id, before, after, changed },
+      ip_address: ip,
     });
   };
 
@@ -170,13 +217,14 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   };
 
   const applyPreset = (p: Preset) => {
+    const before = draftToPayload();
     const next = emptyDraft();
     for (const perm of PERMISSIONS) {
       next[perm] = new Set((p.payload?.[perm] ?? []) as AppRole[]);
     }
     setDraft(next);
     toast.success(t("perms.presets.applied"));
-    void logPresetAction("apply", { id: p.id, name: p.name });
+    void logPresetAction("apply", { id: p.id, name: p.name }, { before, after: p.payload ?? {} });
     qc.invalidateQueries({ queryKey: ["preset-audit", tenantId] });
   };
 
@@ -187,14 +235,19 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const createPresetMut = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
+      const payload = draftToPayload();
       const { data: inserted, error } = await db.from("inventory_permission_presets").insert({
         owner_user_id: user.id,
         name: pName.trim(),
         description: pDesc.trim() || null,
-        payload: draftToPayload(),
+        payload,
       }).select("id,name").single();
       if (error) throw error;
-      await logPresetAction("create", { id: inserted.id as string, name: inserted.name as string });
+      await logPresetAction(
+        "create",
+        { id: inserted.id as string, name: inserted.name as string },
+        { before: null, after: payload },
+      );
     },
     onSuccess: () => {
       toast.success(t("perms.presets.saved"));
@@ -206,12 +259,13 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   });
 
   const updatePresetMut = useMutation({
-    mutationFn: async (preset: { id: string; name: string }) => {
+    mutationFn: async (preset: { id: string; name: string; payload: Preset["payload"] }) => {
+      const after = draftToPayload();
       const { error } = await db.from("inventory_permission_presets")
-        .update({ payload: draftToPayload() })
+        .update({ payload: after })
         .eq("id", preset.id);
       if (error) throw error;
-      await logPresetAction("update", preset);
+      await logPresetAction("update", preset, { before: preset.payload ?? {}, after });
     },
     onSuccess: () => {
       toast.success(t("perms.presets.updated"));
@@ -222,10 +276,10 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   });
 
   const deletePresetMut = useMutation({
-    mutationFn: async (preset: { id: string; name: string }) => {
+    mutationFn: async (preset: { id: string; name: string; payload: Preset["payload"] }) => {
       const { error } = await db.from("inventory_permission_presets").delete().eq("id", preset.id);
       if (error) throw error;
-      await logPresetAction("delete", preset);
+      await logPresetAction("delete", preset, { before: preset.payload ?? {}, after: null });
     },
     onSuccess: () => {
       toast.success(t("perms.presets.deleted"));
@@ -240,7 +294,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     enabled: canSeeAudit && !!tenantId,
     queryFn: async (): Promise<AuditRow[]> => {
       const { data, error } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,metadata,created_at")
+        .select("id,action,entity,entity_id,user_id,metadata,ip_address,created_at")
         .eq("tenant_id", tenantId)
         .eq("entity", "inventory_permission_preset")
         .order("created_at", { ascending: false })
@@ -249,6 +303,8 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       return (data ?? []) as AuditRow[];
     },
   });
+
+  const [selectedAudit, setSelectedAudit] = useState<AuditRow | null>(null);
 
   const actionLabel = (action: string): string => {
     const key = action.replace(/^preset\./, "") as PresetAuditAction;
@@ -379,7 +435,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                     <>
                       <Button
                         size="sm" variant="outline" className="h-7 gap-1"
-                        onClick={() => updatePresetMut.mutate({ id: p.id, name: p.name })}
+                        onClick={() => updatePresetMut.mutate({ id: p.id, name: p.name, payload: p.payload })}
                         disabled={updatePresetMut.isPending}
                       >
                         <Save className="h-3 w-3" /> {t("perms.presets.update")}
@@ -387,7 +443,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                       <Button
                         size="sm" variant="ghost" className="h-7 gap-1 text-destructive hover:text-destructive"
                         onClick={() => {
-                          if (confirm(t("perms.presets.confirmDelete"))) deletePresetMut.mutate({ id: p.id, name: p.name });
+                          if (confirm(t("perms.presets.confirmDelete"))) deletePresetMut.mutate({ id: p.id, name: p.name, payload: p.payload });
                         }}
                       >
                         <Trash2 className="h-3 w-3" /> {t("perms.presets.delete")}
@@ -424,11 +480,12 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                     <TableHead>{t("perms.audit.what")}</TableHead>
                     <TableHead>{t("perms.audit.preset")}</TableHead>
                     <TableHead className="text-right">{t("perms.audit.who")}</TableHead>
+                    <TableHead className="w-[60px] text-right">{t("perms.audit.view")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {auditQ.data!.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow key={row.id} className="cursor-pointer" onClick={() => setSelectedAudit(row)}>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(row.created_at).toLocaleString()}
                       </TableCell>
@@ -441,6 +498,17 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                       <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
                         {row.user_id ? row.user_id.slice(0, 8) : "—"}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAudit(row); }}
+                          aria-label={t("perms.audit.view")}
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -449,6 +517,73 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
           )}
         </Card>
       )}
+
+      <Sheet open={!!selectedAudit} onOpenChange={(o) => !o && setSelectedAudit(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {selectedAudit && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary" />
+                  {t("perms.audit.details")}
+                  <Badge variant={actionVariant(selectedAudit.action)}>{actionLabel(selectedAudit.action)}</Badge>
+                </SheetTitle>
+                <SheetDescription>{t("perms.audit.detailsSub")}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-4 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.timestamp")}</div>
+                    <div className="font-mono text-xs">{new Date(selectedAudit.created_at).toLocaleString()}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.ip")}</div>
+                    <div className="font-mono text-xs">{selectedAudit.ip_address ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.user")}</div>
+                    <div className="font-mono text-xs truncate">{selectedAudit.user_id ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.preset")}</div>
+                    <div className="truncate text-xs">{selectedAudit.metadata?.preset_name ?? selectedAudit.entity_id ?? "—"}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+                    {t("perms.audit.changed")}
+                  </div>
+                  {(selectedAudit.metadata?.changed ?? []).length === 0 ? (
+                    <p className="text-xs italic text-muted-foreground">{t("perms.audit.noChange")}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedAudit.metadata!.changed!.map((p) => (
+                        <Badge key={p} variant="secondary" className="text-[10px]">
+                          {t(`perms.perm.${p}` as never)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <MatrixSide
+                    title={t("perms.audit.before")}
+                    payload={selectedAudit.metadata?.before ?? null}
+                    changed={selectedAudit.metadata?.changed ?? []}
+                  />
+                  <MatrixSide
+                    title={t("perms.audit.after")}
+                    payload={selectedAudit.metadata?.after ?? null}
+                    changed={selectedAudit.metadata?.changed ?? []}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <Card className="p-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -566,4 +701,50 @@ function emptyDraft(): Record<InventoryPermission, Set<AppRole>> {
     cancel: new Set<AppRole>(),
     adjust_item: new Set<AppRole>(),
   };
+}
+
+function MatrixSide({
+  title,
+  payload,
+  changed,
+}: {
+  title: string;
+  payload: Partial<Record<InventoryPermission, AppRole[]>> | null;
+  changed: InventoryPermission[];
+}) {
+  const isEmpty = !payload;
+  return (
+    <div className="rounded-md border p-2">
+      <div className="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">{title}</div>
+      {isEmpty ? (
+        <p className="text-xs italic text-muted-foreground">—</p>
+      ) : (
+        <div className="space-y-1">
+          {PERMISSIONS.map((p) => {
+            const roles = (payload?.[p] ?? []) as AppRole[];
+            const isChanged = changed.includes(p);
+            return (
+              <div
+                key={p}
+                className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-xs ${
+                  isChanged ? "bg-amber-50 dark:bg-amber-900/20" : ""
+                }`}
+              >
+                <span className="font-mono text-[11px] text-muted-foreground">{p}</span>
+                <span className="flex flex-wrap justify-end gap-1">
+                  {roles.length === 0 ? (
+                    <span className="text-muted-foreground italic">∅</span>
+                  ) : (
+                    roles.map((r) => (
+                      <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>
+                    ))
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
