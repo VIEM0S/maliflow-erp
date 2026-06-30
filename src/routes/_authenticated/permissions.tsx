@@ -702,3 +702,49 @@ function emptyDraft(): Record<InventoryPermission, Set<AppRole>> {
     adjust_item: new Set<AppRole>(),
   };
 }
+
+function MatrixSide({
+  title,
+  payload,
+  changed,
+}: {
+  title: string;
+  payload: Partial<Record<InventoryPermission, AppRole[]>> | null;
+  changed: InventoryPermission[];
+}) {
+  const isEmpty = !payload;
+  return (
+    <div className="rounded-md border p-2">
+      <div className="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">{title}</div>
+      {isEmpty ? (
+        <p className="text-xs italic text-muted-foreground">—</p>
+      ) : (
+        <div className="space-y-1">
+          {PERMISSIONS.map((p) => {
+            const roles = (payload?.[p] ?? []) as AppRole[];
+            const isChanged = changed.includes(p);
+            return (
+              <div
+                key={p}
+                className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-xs ${
+                  isChanged ? "bg-amber-50 dark:bg-amber-900/20" : ""
+                }`}
+              >
+                <span className="font-mono text-[11px] text-muted-foreground">{p}</span>
+                <span className="flex flex-wrap justify-end gap-1">
+                  {roles.length === 0 ? (
+                    <span className="text-muted-foreground italic">∅</span>
+                  ) : (
+                    roles.map((r) => (
+                      <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>
+                    ))
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
