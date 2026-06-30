@@ -217,13 +217,14 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   };
 
   const applyPreset = (p: Preset) => {
+    const before = draftToPayload();
     const next = emptyDraft();
     for (const perm of PERMISSIONS) {
       next[perm] = new Set((p.payload?.[perm] ?? []) as AppRole[]);
     }
     setDraft(next);
     toast.success(t("perms.presets.applied"));
-    void logPresetAction("apply", { id: p.id, name: p.name });
+    void logPresetAction("apply", { id: p.id, name: p.name }, { before, after: p.payload ?? {} });
     qc.invalidateQueries({ queryKey: ["preset-audit", tenantId] });
   };
 
@@ -234,14 +235,19 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const createPresetMut = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
+      const payload = draftToPayload();
       const { data: inserted, error } = await db.from("inventory_permission_presets").insert({
         owner_user_id: user.id,
         name: pName.trim(),
         description: pDesc.trim() || null,
-        payload: draftToPayload(),
+        payload,
       }).select("id,name").single();
       if (error) throw error;
-      await logPresetAction("create", { id: inserted.id as string, name: inserted.name as string });
+      await logPresetAction(
+        "create",
+        { id: inserted.id as string, name: inserted.name as string },
+        { before: null, after: payload },
+      );
     },
     onSuccess: () => {
       toast.success(t("perms.presets.saved"));
@@ -253,12 +259,13 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   });
 
   const updatePresetMut = useMutation({
-    mutationFn: async (preset: { id: string; name: string }) => {
+    mutationFn: async (preset: { id: string; name: string; payload: Preset["payload"] }) => {
+      const after = draftToPayload();
       const { error } = await db.from("inventory_permission_presets")
-        .update({ payload: draftToPayload() })
+        .update({ payload: after })
         .eq("id", preset.id);
       if (error) throw error;
-      await logPresetAction("update", preset);
+      await logPresetAction("update", preset, { before: preset.payload ?? {}, after });
     },
     onSuccess: () => {
       toast.success(t("perms.presets.updated"));
@@ -269,10 +276,10 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   });
 
   const deletePresetMut = useMutation({
-    mutationFn: async (preset: { id: string; name: string }) => {
+    mutationFn: async (preset: { id: string; name: string; payload: Preset["payload"] }) => {
       const { error } = await db.from("inventory_permission_presets").delete().eq("id", preset.id);
       if (error) throw error;
-      await logPresetAction("delete", preset);
+      await logPresetAction("delete", preset, { before: preset.payload ?? {}, after: null });
     },
     onSuccess: () => {
       toast.success(t("perms.presets.deleted"));
