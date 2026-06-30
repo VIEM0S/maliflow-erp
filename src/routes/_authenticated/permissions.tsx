@@ -108,15 +108,24 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const logPresetAction = async (
     action: PresetAuditAction,
     preset: { id: string; name: string },
+    snapshots?: {
+      before?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+      after?: Partial<Record<InventoryPermission, AppRole[]>> | null;
+    },
   ) => {
     if (!user?.id) return;
+    const before = snapshots?.before ?? null;
+    const after = snapshots?.after ?? null;
+    const changed = diffMatrix(before, after);
+    const ip = await getClientIp();
     await db.from("audit_logs").insert({
       tenant_id: tenantId,
       user_id: user.id,
       action: `preset.${action}`,
       entity: "inventory_permission_preset",
       entity_id: preset.id,
-      metadata: { preset_name: preset.name, preset_id: preset.id },
+      metadata: { preset_name: preset.name, preset_id: preset.id, before, after, changed },
+      ip_address: ip,
     });
   };
 
