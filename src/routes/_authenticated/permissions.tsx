@@ -480,11 +480,12 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                     <TableHead>{t("perms.audit.what")}</TableHead>
                     <TableHead>{t("perms.audit.preset")}</TableHead>
                     <TableHead className="text-right">{t("perms.audit.who")}</TableHead>
+                    <TableHead className="w-[60px] text-right">{t("perms.audit.view")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {auditQ.data!.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow key={row.id} className="cursor-pointer" onClick={() => setSelectedAudit(row)}>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(row.created_at).toLocaleString()}
                       </TableCell>
@@ -497,6 +498,17 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                       <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
                         {row.user_id ? row.user_id.slice(0, 8) : "—"}
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={(e) => { e.stopPropagation(); setSelectedAudit(row); }}
+                          aria-label={t("perms.audit.view")}
+                        >
+                          <Search className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -505,6 +517,73 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
           )}
         </Card>
       )}
+
+      <Sheet open={!!selectedAudit} onOpenChange={(o) => !o && setSelectedAudit(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          {selectedAudit && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary" />
+                  {t("perms.audit.details")}
+                  <Badge variant={actionVariant(selectedAudit.action)}>{actionLabel(selectedAudit.action)}</Badge>
+                </SheetTitle>
+                <SheetDescription>{t("perms.audit.detailsSub")}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-4 space-y-4 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.timestamp")}</div>
+                    <div className="font-mono text-xs">{new Date(selectedAudit.created_at).toLocaleString()}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.ip")}</div>
+                    <div className="font-mono text-xs">{selectedAudit.ip_address ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.user")}</div>
+                    <div className="font-mono text-xs truncate">{selectedAudit.user_id ?? "—"}</div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.preset")}</div>
+                    <div className="truncate text-xs">{selectedAudit.metadata?.preset_name ?? selectedAudit.entity_id ?? "—"}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
+                    {t("perms.audit.changed")}
+                  </div>
+                  {(selectedAudit.metadata?.changed ?? []).length === 0 ? (
+                    <p className="text-xs italic text-muted-foreground">{t("perms.audit.noChange")}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedAudit.metadata!.changed!.map((p) => (
+                        <Badge key={p} variant="secondary" className="text-[10px]">
+                          {t(`perms.perm.${p}` as never)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <MatrixSide
+                    title={t("perms.audit.before")}
+                    payload={selectedAudit.metadata?.before ?? null}
+                    changed={selectedAudit.metadata?.changed ?? []}
+                  />
+                  <MatrixSide
+                    title={t("perms.audit.after")}
+                    payload={selectedAudit.metadata?.after ?? null}
+                    changed={selectedAudit.metadata?.changed ?? []}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <Card className="p-4 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
