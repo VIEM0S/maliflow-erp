@@ -258,6 +258,11 @@ const dict = {
     "perms.audit.after": "Après",
     "perms.audit.empty.side": "—",
     "perms.audit.close": "Fermer",
+    "perms.audit.diffTitle": "Différences",
+    "perms.audit.added": "Ajouté",
+    "perms.audit.removed": "Retiré",
+    "perms.audit.noData": "Aucune donnée avant/après enregistrée pour cette entrée.",
+    "perms.audit.empty.roles": "aucun rôle",
   },
   en: {
     "app.name": "Alpha ERP",
@@ -494,6 +499,11 @@ const dict = {
     "perms.audit.after": "After",
     "perms.audit.empty.side": "—",
     "perms.audit.close": "Close",
+    "perms.audit.diffTitle": "Differences",
+    "perms.audit.added": "Added",
+    "perms.audit.removed": "Removed",
+    "perms.audit.noData": "No before/after data recorded for this entry.",
+    "perms.audit.empty.roles": "no role",
   },
 } as const;
 
