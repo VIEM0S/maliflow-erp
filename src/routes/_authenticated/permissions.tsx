@@ -680,47 +680,109 @@ function emptyDraft(): Record<InventoryPermission, Set<AppRole>> {
   };
 }
 
-function MatrixSide({
-  title,
-  payload,
-  changed,
+function RoleList({
+  roles,
+  highlight,
+  emptyLabel,
 }: {
-  title: string;
-  payload: Partial<Record<InventoryPermission, AppRole[]>> | null;
-  changed: InventoryPermission[];
+  roles: AppRole[];
+  highlight?: { added?: Set<AppRole>; removed?: Set<AppRole> };
+  emptyLabel: string;
 }) {
-  const isEmpty = !payload;
+  if (roles.length === 0) {
+    return <span className="text-[11px] italic text-muted-foreground">{emptyLabel}</span>;
+  }
   return (
-    <div className="rounded-md border p-2">
-      <div className="mb-2 text-[11px] font-semibold uppercase text-muted-foreground">{title}</div>
-      {isEmpty ? (
-        <p className="text-xs italic text-muted-foreground">—</p>
+    <span className="flex flex-wrap gap-1">
+      {roles.map((r) => {
+        const added = highlight?.added?.has(r);
+        const removed = highlight?.removed?.has(r);
+        const cls = added
+          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          : removed
+            ? "border-rose-500/50 bg-rose-500/10 text-rose-700 line-through dark:text-rose-300"
+            : "";
+        return (
+          <Badge key={r} variant="outline" className={`text-[10px] ${cls}`}>
+            {r}
+          </Badge>
+        );
+      })}
+    </span>
+  );
+}
+
+function AuditDiff({
+  before,
+  after,
+  changedHint,
+  t,
+}: {
+  before: Partial<Record<InventoryPermission, AppRole[]>> | null;
+  after: Partial<Record<InventoryPermission, AppRole[]>> | null;
+  changedHint: InventoryPermission[] | null;
+  t: (k: never) => string;
+}) {
+  const hasData = !!before || !!after;
+  if (!hasData) {
+    return (
+      <div className="rounded-md border border-dashed p-3 text-xs italic text-muted-foreground">
+        {t("perms.audit.noData" as never)}
+      </div>
+    );
+  }
+  // Recompute diff to be safe, even if hint is missing.
+  const changed = (changedHint && changedHint.length > 0
+    ? changedHint
+    : diffMatrix(before, after)) as InventoryPermission[];
+
+  return (
+    <div className="space-y-2">
+      <div className="text-[11px] font-semibold uppercase text-muted-foreground">
+        {t("perms.audit.diffTitle" as never)}
+      </div>
+      {changed.length === 0 ? (
+        <p className="text-xs italic text-muted-foreground">{t("perms.audit.noChange" as never)}</p>
       ) : (
-        <div className="space-y-1">
-          {PERMISSIONS.map((p) => {
-            const roles = (payload?.[p] ?? []) as AppRole[];
-            const isChanged = changed.includes(p);
+        <ul className="divide-y rounded-md border">
+          {changed.map((p) => {
+            const beforeRoles = ((before?.[p] ?? []) as AppRole[]);
+            const afterRoles = ((after?.[p] ?? []) as AppRole[]);
+            const beforeSet = new Set(beforeRoles);
+            const afterSet = new Set(afterRoles);
+            const added = new Set(afterRoles.filter((r) => !beforeSet.has(r)));
+            const removed = new Set(beforeRoles.filter((r) => !afterSet.has(r)));
             return (
-              <div
-                key={p}
-                className={`flex items-center justify-between gap-2 rounded px-1.5 py-1 text-xs ${
-                  isChanged ? "bg-amber-50 dark:bg-amber-900/20" : ""
-                }`}
-              >
-                <span className="font-mono text-[11px] text-muted-foreground">{p}</span>
-                <span className="flex flex-wrap justify-end gap-1">
-                  {roles.length === 0 ? (
-                    <span className="text-muted-foreground italic">∅</span>
-                  ) : (
-                    roles.map((r) => (
-                      <Badge key={r} variant="outline" className="text-[10px]">{r}</Badge>
-                    ))
-                  )}
-                </span>
-              </div>
+              <li key={p} className="grid gap-2 p-2 md:grid-cols-[1fr_auto_1fr] md:items-center">
+                <div className="md:col-span-3 text-xs font-medium">
+                  {t(`perms.perm.${p}` as never)}
+                  <span className="ml-2 font-mono text-[10px] text-muted-foreground">{p}</span>
+                </div>
+                <div className="rounded border bg-muted/30 p-1.5">
+                  <div className="mb-1 text-[10px] uppercase text-muted-foreground">
+                    {t("perms.audit.before" as never)}
+                  </div>
+                  <RoleList
+                    roles={beforeRoles}
+                    highlight={{ removed }}
+                    emptyLabel={t("perms.audit.empty.roles" as never)}
+                  />
+                </div>
+                <div className="hidden text-muted-foreground md:block">→</div>
+                <div className="rounded border bg-muted/30 p-1.5">
+                  <div className="mb-1 text-[10px] uppercase text-muted-foreground">
+                    {t("perms.audit.after" as never)}
+                  </div>
+                  <RoleList
+                    roles={afterRoles}
+                    highlight={{ added }}
+                    emptyLabel={t("perms.audit.empty.roles" as never)}
+                  />
+                </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
     </div>
   );
