@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/app-shell";
@@ -289,20 +289,50 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     onError: (e: { message: string }) => toast.error(e.message),
   });
 
+  type SortKey = "created_at" | "action";
+  const [auditPage, setAuditPage] = useState(0);
+  const [auditPageSize, setAuditPageSize] = useState<number>(25);
+  const [auditSortBy, setAuditSortBy] = useState<SortKey>("created_at");
+  const [auditSortDir, setAuditSortDir] = useState<"asc" | "desc">("desc");
+
   const auditQ = useQuery({
-    queryKey: ["preset-audit", tenantId],
+    queryKey: ["preset-audit", tenantId, auditPage, auditPageSize, auditSortBy, auditSortDir],
     enabled: canSeeAudit && !!tenantId,
-    queryFn: async (): Promise<AuditRow[]> => {
-      const { data, error } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,metadata,ip_address,created_at")
+    placeholderData: (prev) => prev,
+    queryFn: async (): Promise<{ rows: AuditRow[]; total: number }> => {
+      const from = auditPage * auditPageSize;
+      const to = from + auditPageSize - 1;
+      const { data, error, count } = await db.from("audit_logs")
+        .select("id,action,entity,entity_id,user_id,metadata,ip_address,created_at", { count: "exact" })
         .eq("tenant_id", tenantId)
         .eq("entity", "inventory_permission_preset")
-        .order("created_at", { ascending: false })
-        .limit(50);
+        .order(auditSortBy, { ascending: auditSortDir === "asc" })
+        .range(from, to);
       if (error) throw error;
-      return (data ?? []) as AuditRow[];
+      return { rows: (data ?? []) as AuditRow[], total: count ?? 0 };
     },
   });
+
+  const auditRows = auditQ.data?.rows ?? [];
+  const auditTotal = auditQ.data?.total ?? 0;
+  const auditPageCount = Math.max(1, Math.ceil(auditTotal / auditPageSize));
+  useEffect(() => {
+    if (auditPage > 0 && auditPage >= auditPageCount) setAuditPage(auditPageCount - 1);
+  }, [auditPage, auditPageCount]);
+
+  const toggleSort = (key: SortKey) => {
+    if (auditSortBy === key) {
+      setAuditSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setAuditSortBy(key);
+      setAuditSortDir("desc");
+    }
+    setAuditPage(0);
+  };
+  const sortIcon = (key: SortKey) =>
+    auditSortBy === key
+      ? (auditSortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+      : null;
 
   const [selectedAudit, setSelectedAudit] = useState<AuditRow | null>(null);
 
@@ -465,26 +495,44 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
             </h2>
             <p className="text-xs text-muted-foreground">{t("perms.audit.sub")}</p>
           </div>
-          {auditQ.isLoading ? (
+          {auditQ.isLoading && !auditQ.data ? (
             <div className="flex items-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading")}
             </div>
-          ) : (auditQ.data?.length ?? 0) === 0 ? (
+          ) : auditTotal === 0 ? (
             <p className="text-sm text-muted-foreground italic">{t("perms.audit.empty")}</p>
           ) : (
-            <div className="overflow-hidden rounded-md border">
-              <Table>
+            <>
+              <div className="overflow-hidden rounded-md border">
+                <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[180px]">{t("perms.audit.when")}</TableHead>
-                    <TableHead>{t("perms.audit.what")}</TableHead>
+                    <TableHead className="w-[200px]">
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("created_at")}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        aria-label={auditSortDir === "asc" ? t("perms.audit.sortAsc") : t("perms.audit.sortDesc")}
+                      >
+                        {t("perms.audit.when")} {sortIcon("created_at")}
+                      </button>
+                    </TableHead>
+                    <TableHead>
+                      <button
+                        type="button"
+                        onClick={() => toggleSort("action")}
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                      >
+                        {t("perms.audit.what")} {sortIcon("action")}
+                      </button>
+                    </TableHead>
                     <TableHead>{t("perms.audit.preset")}</TableHead>
                     <TableHead className="text-right">{t("perms.audit.who")}</TableHead>
                     <TableHead className="w-[60px] text-right">{t("perms.audit.view")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditQ.data!.map((row) => (
+                  {auditRows.map((row) => (
                     <TableRow key={row.id} className="cursor-pointer" onClick={() => setSelectedAudit(row)}>
                       <TableCell className="text-xs text-muted-foreground">
                         {new Date(row.created_at).toLocaleString()}
@@ -512,8 +560,46 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
-            </div>
+                </Table>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <span>{t("perms.audit.rows")}</span>
+                  <Select
+                    value={String(auditPageSize)}
+                    onValueChange={(v) => { setAuditPageSize(Number(v)); setAuditPage(0); }}
+                  >
+                    <SelectTrigger className="h-7 w-[70px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[10, 25, 50, 100].map((n) => (
+                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span>· {auditTotal} {t("perms.audit.total")}</span>
+                  {auditQ.isFetching && <Loader2 className="h-3 w-3 animate-spin" />}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>
+                    {t("perms.audit.page")} {auditPage + 1} {t("perms.audit.of")} {auditPageCount}
+                  </span>
+                  <Button
+                    size="sm" variant="outline" className="h-7 gap-1"
+                    onClick={() => setAuditPage((p) => Math.max(0, p - 1))}
+                    disabled={auditPage === 0}
+                  >
+                    <ChevronLeft className="h-3 w-3" /> {t("perms.audit.prev")}
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-7 gap-1"
+                    onClick={() => setAuditPage((p) => Math.min(auditPageCount - 1, p + 1))}
+                    disabled={auditPage + 1 >= auditPageCount}
+                  >
+                    {t("perms.audit.next")} <ChevronRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
         </Card>
       )}
