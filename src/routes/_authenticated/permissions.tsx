@@ -550,35 +550,12 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                   </div>
                 </div>
 
-                <div>
-                  <div className="mb-1 text-[11px] font-semibold uppercase text-muted-foreground">
-                    {t("perms.audit.changed")}
-                  </div>
-                  {(selectedAudit.metadata?.changed ?? []).length === 0 ? (
-                    <p className="text-xs italic text-muted-foreground">{t("perms.audit.noChange")}</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {selectedAudit.metadata!.changed!.map((p) => (
-                        <Badge key={p} variant="secondary" className="text-[10px]">
-                          {t(`perms.perm.${p}` as never)}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <MatrixSide
-                    title={t("perms.audit.before")}
-                    payload={selectedAudit.metadata?.before ?? null}
-                    changed={selectedAudit.metadata?.changed ?? []}
-                  />
-                  <MatrixSide
-                    title={t("perms.audit.after")}
-                    payload={selectedAudit.metadata?.after ?? null}
-                    changed={selectedAudit.metadata?.changed ?? []}
-                  />
-                </div>
+                <AuditDiff
+                  before={selectedAudit.metadata?.before ?? null}
+                  after={selectedAudit.metadata?.after ?? null}
+                  changedHint={selectedAudit.metadata?.changed ?? null}
+                  t={t}
+                />
               </div>
             </>
           )}
