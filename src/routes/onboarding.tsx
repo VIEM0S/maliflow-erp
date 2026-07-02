@@ -62,6 +62,15 @@ function OnboardingPage() {
     }
     setLoading(true);
     try {
+      // Récupère l'utilisateur frais depuis la session courante pour garantir
+      // que created_by == auth.uid() côté RLS (évite les décalages avec le hook useAuth).
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData.user) {
+        toast.error("Session expirée. Veuillez vous reconnecter.");
+        navigate({ to: "/auth" });
+        return;
+      }
+      const uid = authData.user.id;
       const slug = `${slugify(form.name)}-${Math.random().toString(36).slice(2, 6)}`;
       const { data: tenant, error: tErr } = await supabase
         .from("tenants")
@@ -75,14 +84,14 @@ function OnboardingPage() {
           address: form.address || null,
           country: form.country,
           currency: form.currency,
-          created_by: user.id,
+          created_by: uid,
         })
         .select("id")
         .single();
       if (tErr) throw tErr;
 
       const { error: mErr } = await supabase.from("memberships").insert({
-        user_id: user.id,
+        user_id: uid,
         tenant_id: tenant.id,
         role: "owner",
       });
