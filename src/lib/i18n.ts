@@ -520,6 +520,8 @@ const dict = {
     "perms.audit.prev": "Previous",
     "perms.audit.next": "Next",
     "perms.audit.total": "entries",
+    "perms.audit.deniedTitle": "Audit log access denied",
+    "perms.audit.deniedBody": "Only owners (or super-admins) can view this tenant's audit log. Every access attempt is recorded.",
     "perms.audit.sortAsc": "Sort ascending",
     "perms.audit.sortDesc": "Sort descending",
   },
