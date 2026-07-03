@@ -508,7 +508,15 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
         )}
       </Card>
 
-      {canSeeAudit && (
+      {!canSeeAudit ? (
+        <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 text-destructive" />
+          <div>
+            <div className="font-medium text-destructive">{t("perms.audit.deniedTitle")}</div>
+            <p className="text-xs text-muted-foreground">{t("perms.audit.deniedBody")}</p>
+          </div>
+        </Card>
+      ) : (
         <Card className="p-4 space-y-3">
           <div>
             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -516,7 +524,15 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
             </h2>
             <p className="text-xs text-muted-foreground">{t("perms.audit.sub")}</p>
           </div>
-          {auditQ.isLoading && !auditQ.data ? (
+          {auditQ.error ? (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+              <Lock className="mt-0.5 h-3.5 w-3.5" />
+              <div>
+                <div className="font-medium">{t("perms.audit.deniedTitle")}</div>
+                <div className="text-muted-foreground">{(auditQ.error as Error).message}</div>
+              </div>
+            </div>
+          ) : auditQ.isLoading && !auditQ.data ? (
             <div className="flex items-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading")}
             </div>
