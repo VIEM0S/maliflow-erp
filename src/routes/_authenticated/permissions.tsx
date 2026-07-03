@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { listPresetAudit, getPresetAuditDetail } from "@/lib/audit.functions";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -299,22 +301,25 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const [auditPageSize, setAuditPageSize] = useState<number>(25);
   const [auditSortBy, setAuditSortBy] = useState<SortKey>("created_at");
   const [auditSortDir, setAuditSortDir] = useState<"asc" | "desc">("desc");
+  const callList = useServerFn(listPresetAudit);
+  const callDetail = useServerFn(getPresetAuditDetail);
 
   const auditQ = useQuery({
     queryKey: ["preset-audit", tenantId, auditPage, auditPageSize, auditSortBy, auditSortDir],
     enabled: canSeeAudit && !!tenantId,
     placeholderData: (prev) => prev,
+    retry: false,
     queryFn: async (): Promise<{ rows: AuditRow[]; total: number }> => {
-      const from = auditPage * auditPageSize;
-      const to = from + auditPageSize - 1;
-      const { data, error, count } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,created_at,preset_name:metadata->>preset_name", { count: "exact" })
-        .eq("tenant_id", tenantId)
-        .eq("entity", "inventory_permission_preset")
-        .order(auditSortBy, { ascending: auditSortDir === "asc" })
-        .range(from, to);
-      if (error) throw error;
-      return { rows: (data ?? []) as AuditRow[], total: count ?? 0 };
+      const res = await callList({
+        data: {
+          tenantId,
+          page: auditPage,
+          pageSize: auditPageSize,
+          sortBy: auditSortBy,
+          sortDir: auditSortDir,
+        },
+      });
+      return { rows: (res.rows ?? []) as AuditRow[], total: res.total ?? 0 };
     },
   });
 
@@ -345,13 +350,10 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     queryKey: ["preset-audit-detail", selectedAudit?.id],
     enabled: !!selectedAudit?.id,
     staleTime: 5 * 60_000,
+    retry: false,
     queryFn: async (): Promise<AuditDetail | null> => {
-      const { data, error } = await db.from("audit_logs")
-        .select("id,ip_address,metadata")
-        .eq("id", selectedAudit!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data ?? null) as AuditDetail | null;
+      const row = await callDetail({ data: { tenantId, id: selectedAudit!.id } });
+      return (row ?? null) as AuditDetail | null;
     },
   });
 
@@ -506,7 +508,15 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
         )}
       </Card>
 
-      {canSeeAudit && (
+      {!canSeeAudit ? (
+        <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 text-destructive" />
+          <div>
+            <div className="font-medium text-destructive">{t("perms.audit.deniedTitle")}</div>
+            <p className="text-xs text-muted-foreground">{t("perms.audit.deniedBody")}</p>
+          </div>
+        </Card>
+      ) : (
         <Card className="p-4 space-y-3">
           <div>
             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -514,7 +524,15 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
             </h2>
             <p className="text-xs text-muted-foreground">{t("perms.audit.sub")}</p>
           </div>
-          {auditQ.isLoading && !auditQ.data ? (
+          {auditQ.error ? (
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+              <Lock className="mt-0.5 h-3.5 w-3.5" />
+              <div>
+                <div className="font-medium">{t("perms.audit.deniedTitle")}</div>
+                <div className="text-muted-foreground">{(auditQ.error as Error).message}</div>
+              </div>
+            </div>
+          ) : auditQ.isLoading && !auditQ.data ? (
             <div className="flex items-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading")}
             </div>
