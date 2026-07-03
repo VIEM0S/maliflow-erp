@@ -301,22 +301,25 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const [auditPageSize, setAuditPageSize] = useState<number>(25);
   const [auditSortBy, setAuditSortBy] = useState<SortKey>("created_at");
   const [auditSortDir, setAuditSortDir] = useState<"asc" | "desc">("desc");
+  const callList = useServerFn(listPresetAudit);
+  const callDetail = useServerFn(getPresetAuditDetail);
 
   const auditQ = useQuery({
     queryKey: ["preset-audit", tenantId, auditPage, auditPageSize, auditSortBy, auditSortDir],
     enabled: canSeeAudit && !!tenantId,
     placeholderData: (prev) => prev,
+    retry: false,
     queryFn: async (): Promise<{ rows: AuditRow[]; total: number }> => {
-      const from = auditPage * auditPageSize;
-      const to = from + auditPageSize - 1;
-      const { data, error, count } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,created_at,preset_name:metadata->>preset_name", { count: "exact" })
-        .eq("tenant_id", tenantId)
-        .eq("entity", "inventory_permission_preset")
-        .order(auditSortBy, { ascending: auditSortDir === "asc" })
-        .range(from, to);
-      if (error) throw error;
-      return { rows: (data ?? []) as AuditRow[], total: count ?? 0 };
+      const res = await callList({
+        data: {
+          tenantId,
+          page: auditPage,
+          pageSize: auditPageSize,
+          sortBy: auditSortBy,
+          sortDir: auditSortDir,
+        },
+      });
+      return { rows: (res.rows ?? []) as AuditRow[], total: res.total ?? 0 };
     },
   });
 
@@ -347,13 +350,10 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
     queryKey: ["preset-audit-detail", selectedAudit?.id],
     enabled: !!selectedAudit?.id,
     staleTime: 5 * 60_000,
+    retry: false,
     queryFn: async (): Promise<AuditDetail | null> => {
-      const { data, error } = await db.from("audit_logs")
-        .select("id,ip_address,metadata")
-        .eq("id", selectedAudit!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return (data ?? null) as AuditDetail | null;
+      const row = await callDetail({ data: { tenantId, id: selectedAudit!.id } });
+      return (row ?? null) as AuditDetail | null;
     },
   });
 
