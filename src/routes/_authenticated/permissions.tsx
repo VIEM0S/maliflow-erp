@@ -55,6 +55,13 @@ type AuditRow = {
   entity: string | null;
   entity_id: string | null;
   user_id: string | null;
+  preset_name: string | null;
+  created_at: string;
+};
+
+type AuditDetail = {
+  id: string;
+  ip_address: string | null;
   metadata: {
     preset_name?: string;
     preset_id?: string;
@@ -62,8 +69,6 @@ type AuditRow = {
     after?: Partial<Record<InventoryPermission, AppRole[]>> | null;
     changed?: InventoryPermission[];
   } | null;
-  ip_address: string | null;
-  created_at: string;
 };
 
 type PresetAuditAction = "create" | "update" | "delete" | "apply";
@@ -303,7 +308,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       const from = auditPage * auditPageSize;
       const to = from + auditPageSize - 1;
       const { data, error, count } = await db.from("audit_logs")
-        .select("id,action,entity,entity_id,user_id,metadata,ip_address,created_at", { count: "exact" })
+        .select("id,action,entity,entity_id,user_id,created_at,preset_name:metadata->>preset_name", { count: "exact" })
         .eq("tenant_id", tenantId)
         .eq("entity", "inventory_permission_preset")
         .order(auditSortBy, { ascending: auditSortDir === "asc" })
@@ -335,6 +340,20 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       : null;
 
   const [selectedAudit, setSelectedAudit] = useState<AuditRow | null>(null);
+
+  const auditDetailQ = useQuery({
+    queryKey: ["preset-audit-detail", selectedAudit?.id],
+    enabled: !!selectedAudit?.id,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<AuditDetail | null> => {
+      const { data, error } = await db.from("audit_logs")
+        .select("id,ip_address,metadata")
+        .eq("id", selectedAudit!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as AuditDetail | null;
+    },
+  });
 
   const actionLabel = (action: string): string => {
     const key = action.replace(/^preset\./, "") as PresetAuditAction;
@@ -541,7 +560,7 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                         <Badge variant={actionVariant(row.action)}>{actionLabel(row.action)}</Badge>
                       </TableCell>
                       <TableCell className="truncate">
-                        {row.metadata?.preset_name ?? row.entity_id ?? "—"}
+                        {row.preset_name ?? row.entity_id ?? "—"}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] text-muted-foreground">
                         {row.user_id ? row.user_id.slice(0, 8) : "—"}
@@ -624,7 +643,11 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                   </div>
                   <div className="rounded-md border p-2">
                     <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.ip")}</div>
-                    <div className="font-mono text-xs">{selectedAudit.ip_address ?? "—"}</div>
+                    <div className="font-mono text-xs">
+                      {auditDetailQ.isLoading
+                        ? <Loader2 className="inline h-3 w-3 animate-spin" />
+                        : (auditDetailQ.data?.ip_address ?? "—")}
+                    </div>
                   </div>
                   <div className="rounded-md border p-2">
                     <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.user")}</div>
@@ -632,16 +655,22 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                   </div>
                   <div className="rounded-md border p-2">
                     <div className="text-[11px] uppercase text-muted-foreground">{t("perms.audit.preset")}</div>
-                    <div className="truncate text-xs">{selectedAudit.metadata?.preset_name ?? selectedAudit.entity_id ?? "—"}</div>
+                    <div className="truncate text-xs">{selectedAudit.preset_name ?? selectedAudit.entity_id ?? "—"}</div>
                   </div>
                 </div>
 
-                <AuditDiff
-                  before={selectedAudit.metadata?.before ?? null}
-                  after={selectedAudit.metadata?.after ?? null}
-                  changedHint={selectedAudit.metadata?.changed ?? null}
-                  t={t}
-                />
+                {auditDetailQ.isLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> {t("common.loading")}
+                  </div>
+                ) : (
+                  <AuditDiff
+                    before={auditDetailQ.data?.metadata?.before ?? null}
+                    after={auditDetailQ.data?.metadata?.after ?? null}
+                    changedHint={auditDetailQ.data?.metadata?.changed ?? null}
+                    t={t}
+                  />
+                )}
               </div>
             </>
           )}
