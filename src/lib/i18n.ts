@@ -269,6 +269,8 @@ const dict = {
     "perms.audit.prev": "Précédent",
     "perms.audit.next": "Suivant",
     "perms.audit.total": "entrées",
+    "perms.audit.deniedTitle": "Accès refusé au journal d'audit",
+    "perms.audit.deniedBody": "Seuls les propriétaires (ou super-administrateurs) peuvent consulter le journal d'audit de cette entreprise. Toute tentative d'accès est enregistrée.",
     "perms.audit.sortAsc": "Trier croissant",
     "perms.audit.sortDesc": "Trier décroissant",
   },
