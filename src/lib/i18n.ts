@@ -273,6 +273,10 @@ const dict = {
     "perms.audit.deniedBody": "Seuls les propriétaires (ou super-administrateurs) peuvent consulter le journal d'audit de cette entreprise. Toute tentative d'accès est enregistrée.",
     "perms.audit.sortAsc": "Trier croissant",
     "perms.audit.sortDesc": "Trier décroissant",
+    "perms.audit.search": "Rechercher",
+    "perms.audit.searchPlaceholder": "Rechercher action ou preset…",
+    "perms.audit.actionFilter": "Filtrer par action",
+    "perms.audit.actionAll": "Toutes les actions",
   },
   en: {
     "app.name": "Alpha ERP",
