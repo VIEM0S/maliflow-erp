@@ -547,6 +547,33 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
             </h2>
             <p className="text-xs text-muted-foreground">{t("perms.audit.sub")}</p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={auditSearchInput}
+                onChange={(e) => setAuditSearchInput(e.target.value)}
+                placeholder={t("perms.audit.searchPlaceholder")}
+                className="h-8 w-56 pl-7 text-xs"
+                aria-label={t("perms.audit.search")}
+              />
+            </div>
+            <Select
+              value={auditActionFilter}
+              onValueChange={(v) => { setAuditActionFilter(v as typeof auditActionFilter); setAuditPage(0); }}
+            >
+              <SelectTrigger className="h-8 w-[140px] text-xs" aria-label={t("perms.audit.actionFilter")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("perms.audit.actionAll")}</SelectItem>
+                <SelectItem value="create">{t("perms.audit.action.create")}</SelectItem>
+                <SelectItem value="update">{t("perms.audit.action.update")}</SelectItem>
+                <SelectItem value="delete">{t("perms.audit.action.delete")}</SelectItem>
+                <SelectItem value="apply">{t("perms.audit.action.apply")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {auditQ.error ? (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
               <Lock className="mt-0.5 h-3.5 w-3.5" />
