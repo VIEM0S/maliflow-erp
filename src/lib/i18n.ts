@@ -528,6 +528,10 @@ const dict = {
     "perms.audit.deniedBody": "Only owners (or super-admins) can view this tenant's audit log. Every access attempt is recorded.",
     "perms.audit.sortAsc": "Sort ascending",
     "perms.audit.sortDesc": "Sort descending",
+    "perms.audit.search": "Search",
+    "perms.audit.searchPlaceholder": "Search action or preset…",
+    "perms.audit.actionFilter": "Filter by action",
+    "perms.audit.actionAll": "All actions",
   },
 } as const;
 
