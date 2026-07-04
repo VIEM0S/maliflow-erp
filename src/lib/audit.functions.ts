@@ -70,6 +70,8 @@ const listInput = z.object({
   pageSize: z.number().int().min(1).max(200).default(25),
   sortBy: z.enum(["created_at", "action"]).default("created_at"),
   sortDir: z.enum(["asc", "desc"]).default("desc"),
+  search: z.string().trim().max(120).optional(),
+  actionFilter: z.enum(["all", "create", "update", "delete", "apply"]).default("all"),
 });
 
 export const listPresetAudit = createServerFn({ method: "GET" })
@@ -79,14 +81,28 @@ export const listPresetAudit = createServerFn({ method: "GET" })
     await assertAuditAccess(context.supabase, context.userId, data.tenantId, "list");
     const from = data.page * data.pageSize;
     const to = from + data.pageSize - 1;
-    const { data: rows, error, count } = await context.supabase
+    let query = context.supabase
       .from("audit_logs")
       .select(
         "id,action,entity,entity_id,user_id,created_at,preset_name:metadata->>preset_name",
         { count: "exact" },
       )
       .eq("tenant_id", data.tenantId)
-      .eq("entity", "inventory_permission_preset")
+      .eq("entity", "inventory_permission_preset");
+    if (data.actionFilter !== "all") {
+      query = query.eq("action", `preset.${data.actionFilter}`);
+    }
+    if (data.search && data.search.length > 0) {
+      // Escape PostgREST reserved chars in ilike patterns.
+      const raw = data.search.replace(/[%,()]/g, " ").trim();
+      if (raw.length > 0) {
+        const pat = `%${raw}%`;
+        query = query.or(
+          `action.ilike.${pat},metadata->>preset_name.ilike.${pat}`,
+        );
+      }
+    }
+    const { data: rows, error, count } = await query
       .order(data.sortBy, { ascending: data.sortDir === "asc" })
       .range(from, to);
     if (error) throw error;
