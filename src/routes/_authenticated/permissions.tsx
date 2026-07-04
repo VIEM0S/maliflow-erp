@@ -301,11 +301,32 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   const [auditPageSize, setAuditPageSize] = useState<number>(25);
   const [auditSortBy, setAuditSortBy] = useState<SortKey>("created_at");
   const [auditSortDir, setAuditSortDir] = useState<"asc" | "desc">("desc");
+  const [auditSearchInput, setAuditSearchInput] = useState("");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState<
+    "all" | "create" | "update" | "delete" | "apply"
+  >("all");
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setAuditSearch(auditSearchInput.trim());
+      setAuditPage(0);
+    }, 300);
+    return () => clearTimeout(h);
+  }, [auditSearchInput]);
   const callList = useServerFn(listPresetAudit);
   const callDetail = useServerFn(getPresetAuditDetail);
 
   const auditQ = useQuery({
-    queryKey: ["preset-audit", tenantId, auditPage, auditPageSize, auditSortBy, auditSortDir],
+    queryKey: [
+      "preset-audit",
+      tenantId,
+      auditPage,
+      auditPageSize,
+      auditSortBy,
+      auditSortDir,
+      auditSearch,
+      auditActionFilter,
+    ],
     enabled: canSeeAudit && !!tenantId,
     placeholderData: (prev) => prev,
     retry: false,
@@ -317,6 +338,8 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
           pageSize: auditPageSize,
           sortBy: auditSortBy,
           sortDir: auditSortDir,
+          search: auditSearch || undefined,
+          actionFilter: auditActionFilter,
         },
       });
       return { rows: (res.rows ?? []) as AuditRow[], total: res.total ?? 0 };
