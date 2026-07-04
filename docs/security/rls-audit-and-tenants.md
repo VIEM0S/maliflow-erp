@@ -96,3 +96,27 @@ WHERE m.id IS NULL;
 
 Voir `tests/rls/audit-tenant-isolation.sql` pour la batterie complète de
 tests d'isolation multi-tenant.
+
+## Recherche côté serveur (audit)
+
+La server function `listPresetAudit` (`src/lib/audit.functions.ts`)
+accepte deux filtres appliqués **avant** la pagination et le tri, tout
+en conservant les vérifications RLS et `assertAuditAccess` :
+
+- `search` : texte libre (`ilike %q%`) sur `action` ou
+  `metadata->>preset_name`.
+- `actionFilter` : `all | create | update | delete | apply` — mappé sur
+  `action = 'preset.<x>'`.
+
+Les filtres sont exécutés côté PostgREST via une requête paramétrée
+(`.or(...)`, `.eq(...)`) ; ils ne remplacent ni ne contournent les
+politiques `audit_select_owner`.
+
+## Isolation du détail (drawer)
+
+`getPresetAuditDetail` filtre **toujours** par `id` **et** `tenant_id`.
+Le scénario T6 (`tests/rls/audit-tenant-isolation.sql`) vérifie qu'un
+propriétaire du tenant A qui injecte l'ID d'un audit du tenant B
+(récupéré hors-bande) reçoit 0 ligne : la RLS masque déjà la ligne, et
+la garde applicative `.eq("tenant_id", tenantId)` fournit une
+défense en profondeur.

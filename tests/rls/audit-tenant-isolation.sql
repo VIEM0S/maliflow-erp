@@ -170,6 +170,114 @@ SELECT pg_temp.assert(
 
 RESET role;
 
+-- ---------------------------------------------------------------
+-- T6. Cross-tenant drawer injection: owner A tries to load a detail
+--     row that belongs to tenant B by passing tenant B's audit id
+--     while filtering on tenant_id = tenant A. The server function
+--     applies `.eq("tenant_id", tenantId)`, which under RLS scoped
+--     to owner A must return 0 rows even when the id exists.
+-- ---------------------------------------------------------------
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', current_setting('test.owner_a'), 'role', 'authenticated')::text,
+  true);
+
+-- Grab the id of tenant B's seeded audit row via a superuser CTE
+-- (bypasses RLS just to obtain the id — mirrors what an attacker
+-- would harvest out-of-band).
+DO $$
+DECLARE
+  _b_id uuid;
+  _visible int;
+BEGIN
+  -- Read the id in a SECURITY DEFINER-like way via set_config from
+  -- earlier seed data — we stored the tenant ids, but not the audit id.
+  -- Instead, read it from a temporary superuser context.
+  RESET role;
+  SELECT id INTO _b_id FROM public.audit_logs
+   WHERE tenant_id = current_setting('test.tenant_b')::uuid
+   LIMIT 1;
+  SET LOCAL role authenticated;
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', current_setting('test.owner_a'), 'role', 'authenticated')::text,
+    true);
+
+  -- Simulate getPresetAuditDetail: id = <B's id>, tenant_id = A.
+  SELECT count(*) INTO _visible FROM public.audit_logs
+    WHERE id = _b_id AND tenant_id = current_setting('test.tenant_a')::uuid;
+  IF _visible <> 0 THEN
+    RAISE EXCEPTION 'T6: cross-tenant id + own tenant_id filter must return 0';
+  END IF;
+
+  -- And without the tenant_id guard, RLS still hides it.
+  SELECT count(*) INTO _visible FROM public.audit_logs WHERE id = _b_id;
+  IF _visible <> 0 THEN
+    RAISE EXCEPTION 'T6: RLS must hide tenant B audit row from owner A';
+  END IF;
+END $$;
+
+RESET role;
+
+-- ---------------------------------------------------------------
+-- T7. Denied access to the audit journal must produce exactly one
+--     `audit.access_denied.<action>` record (written by the server
+--     function via the admin client). We simulate the admin insert
+--     directly and assert the row exists once with the expected
+--     shape: user_id + tenant_id + reason.
+-- ---------------------------------------------------------------
+-- Baseline count (should be zero — nothing seeded).
+SELECT pg_temp.assert(
+  (SELECT count(*) FROM public.audit_logs
+    WHERE action LIKE 'audit.access_denied.%') = 0,
+  'T7: no access_denied rows should exist before the simulated attempt');
+
+-- Simulate `assertAuditAccess` denial for the cashier trying to list.
+INSERT INTO public.audit_logs (tenant_id, user_id, action, entity, metadata)
+VALUES (
+  current_setting('test.tenant_a')::uuid,
+  current_setting('test.cashier_a')::uuid,
+  'audit.access_denied.list',
+  'audit_logs',
+  jsonb_build_object(
+    'reason', 'insufficient_permissions',
+    'required_role', jsonb_build_array('owner', 'super_admin'),
+    'observed_role', 'cashier',
+    'action', 'list'
+  )
+);
+
+-- Exactly one record with the expected shape.
+SELECT pg_temp.assert(
+  (SELECT count(*) FROM public.audit_logs
+    WHERE action = 'audit.access_denied.list'
+      AND tenant_id = current_setting('test.tenant_a')::uuid
+      AND user_id = current_setting('test.cashier_a')::uuid
+      AND metadata->>'reason' = 'insufficient_permissions'
+      AND metadata->>'observed_role' = 'cashier') = 1,
+  'T7: exactly one access_denied.list row with expected user/tenant/reason');
+
+-- A second, independent denial (e.g. detail attempt) must create its
+-- own row — no de-duplication, no missing insert.
+INSERT INTO public.audit_logs (tenant_id, user_id, action, entity, metadata)
+VALUES (
+  current_setting('test.tenant_a')::uuid,
+  current_setting('test.cashier_a')::uuid,
+  'audit.access_denied.detail',
+  'audit_logs',
+  jsonb_build_object(
+    'reason', 'insufficient_permissions',
+    'required_role', jsonb_build_array('owner', 'super_admin'),
+    'observed_role', 'cashier',
+    'action', 'detail'
+  )
+);
+SELECT pg_temp.assert(
+  (SELECT count(*) FROM public.audit_logs
+    WHERE action LIKE 'audit.access_denied.%'
+      AND tenant_id = current_setting('test.tenant_a')::uuid
+      AND user_id = current_setting('test.cashier_a')::uuid) = 2,
+  'T7: each denied attempt appends exactly one audit row');
+
 -- Everything passed — nothing raised.
 DO $$ BEGIN RAISE NOTICE 'RLS ISOLATION TESTS PASSED'; END $$;
 
