@@ -282,3 +282,52 @@ SELECT pg_temp.assert(
 DO $$ BEGIN RAISE NOTICE 'RLS ISOLATION TESTS PASSED'; END $$;
 
 ROLLBACK;
+
+-- =======================================================================
+-- T8 — Index & performance sanity checks (read-only, outside the ROLLBACK
+-- block so it observes real database state).
+-- =======================================================================
+
+\echo '--- T8.1: required indexes exist on public.audit_logs'
+SELECT indexname
+FROM pg_indexes
+WHERE schemaname='public' AND tablename='audit_logs'
+  AND indexname IN (
+    'idx_audit_logs_tenant_created',
+    'idx_audit_logs_tenant_action',
+    'idx_audit_logs_tenant_entity_created',
+    'idx_audit_logs_preset_name'
+  )
+ORDER BY indexname;
+-- Expected: 4 rows. Any missing index means the listPresetAudit search
+-- path will fall back to seq-scan and violate the perf budget below.
+
+\echo '--- T8.2: EXPLAIN — tenant + entity + created_at DESC must use an index'
+EXPLAIN (COSTS OFF)
+SELECT id, action, created_at
+FROM public.audit_logs
+WHERE tenant_id = '00000000-0000-0000-0000-000000000000'
+  AND entity = 'inventory_permission_preset'
+ORDER BY created_at DESC
+LIMIT 25;
+-- Expected plan mentions "Index Scan" on one of the tenant-scoped indexes.
+
+\echo '--- T8.3: EXPLAIN — preset_name search must use the expression index'
+EXPLAIN (COSTS OFF)
+SELECT id
+FROM public.audit_logs
+WHERE entity = 'inventory_permission_preset'
+  AND metadata->>'preset_name' ILIKE '%standard%';
+-- Expected plan mentions idx_audit_logs_preset_name (or a bitmap over it).
+
+\echo '--- T8.4: perf budget — filtered list under 100ms on a warm cache'
+\timing on
+SELECT count(*) FROM public.audit_logs
+WHERE entity = 'inventory_permission_preset'
+  AND action = 'preset.update'
+ORDER BY created_at DESC;
+\timing off
+-- Manual gate: fail the run if the reported time exceeds 100ms per 10k
+-- rows. Adjust the threshold to match your dataset size; the point of
+-- this smoke test is to detect a regression (seq-scan appearing after
+-- an index rename or accidental DROP INDEX).
