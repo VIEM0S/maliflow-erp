@@ -532,10 +532,18 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       </Card>
 
       {!canSeeAudit ? (
-        <Card className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4 text-sm">
-          <Lock className="mt-0.5 h-4 w-4 text-destructive" />
+        <Card
+          role="alert"
+          aria-live="polite"
+          aria-labelledby="audit-denied-title"
+          tabIndex={0}
+          className="flex items-start gap-3 border-destructive/40 bg-destructive/5 p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+        >
+          <Lock aria-hidden="true" className="mt-0.5 h-4 w-4 text-destructive" />
           <div>
-            <div className="font-medium text-destructive">{t("perms.audit.deniedTitle")}</div>
+            <div id="audit-denied-title" className="font-medium text-destructive">
+              {t("perms.audit.deniedTitle")}
+            </div>
             <p className="text-xs text-muted-foreground">{t("perms.audit.deniedBody")}</p>
           </div>
         </Card>
