@@ -12,6 +12,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useT } from "@/lib/i18n";
 import { slugify } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { createTenant } from "@/lib/tenants.functions";
 
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
@@ -39,6 +41,7 @@ function OnboardingPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const createTenantFn = useServerFn(createTenant);
   const [form, setForm] = useState({
     name: "",
     city: "Bamako",
@@ -62,19 +65,16 @@ function OnboardingPage() {
     }
     setLoading(true);
     try {
-      // Récupère l'utilisateur frais depuis la session courante pour garantir
-      // que created_by == auth.uid() côté RLS (évite les décalages avec le hook useAuth).
-      const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData.user) {
+      // Vérifie la session avant l'appel serveur pour un message clair.
+      const { data: authData } = await supabase.auth.getSession();
+      if (!authData.session) {
         toast.error("Session expirée. Veuillez vous reconnecter.");
         navigate({ to: "/auth" });
         return;
       }
-      const uid = authData.user.id;
       const slug = `${slugify(form.name)}-${Math.random().toString(36).slice(2, 6)}`;
-      const { data: tenant, error: tErr } = await supabase
-        .from("tenants")
-        .insert({
+      const tenant = await createTenantFn({
+        data: {
           name: form.name.trim(),
           slug,
           city: form.city || null,
@@ -84,25 +84,8 @@ function OnboardingPage() {
           address: form.address || null,
           country: form.country,
           currency: form.currency,
-          created_by: uid,
-        })
-        .select("id")
-        .single();
-      if (tErr) throw tErr;
-
-      const { error: mErr } = await supabase.from("memberships").insert({
-        user_id: uid,
-        tenant_id: tenant.id,
-        role: "owner",
+        },
       });
-      if (mErr) throw mErr;
-
-      // default store
-      await supabase.from("stores").insert({
-        tenant_id: tenant.id,
-        name: form.city ? `${form.name} — ${form.city}` : `${form.name} — Principal`,
-      });
-
       if (typeof window !== "undefined") window.localStorage.setItem("alpha_active_tenant", tenant.id);
       await qc.invalidateQueries({ queryKey: ["memberships"] });
       toast.success("Entreprise créée");
