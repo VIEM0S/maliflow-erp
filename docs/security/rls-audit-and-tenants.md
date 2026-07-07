@@ -97,6 +97,56 @@ WHERE m.id IS NULL;
 Voir `tests/rls/audit-tenant-isolation.sql` pour la batterie complète de
 tests d'isolation multi-tenant.
 
+## Fix RLS `tenants` — écriture côté serveur
+
+La création d'un tenant passe désormais par la server function
+`createTenant` (`src/lib/tenants.functions.ts`), protégée par
+`requireSupabaseAuth`. La valeur `created_by` est renseignée à partir de
+`context.userId` (le `sub` du JWT vérifié par le middleware) et jamais
+depuis le body — impossible pour l'appelant de forger un autre
+propriétaire. Cette bascule élimine la classe d'erreurs :
+
+> `new row violates row-level security policy for table "tenants"`
+
+qui apparaissait quand la session Supabase du navigateur était partielle
+ou expirée : `auth.uid()` valait alors `NULL` côté PostgREST et la
+politique `tenants_insert_self` refusait l'insert. Le membership `owner`
+et le store par défaut sont provisionnés dans la même server function
+pour garantir la cohérence du tenant.
+
+## Index et budget de performance
+
+Migration `..._audit_perf_indexes.sql` ajoute :
+
+- `idx_audit_logs_tenant_created (tenant_id, created_at DESC)` — liste
+  paginée par tenant, tri par défaut.
+- `idx_audit_logs_tenant_action (tenant_id, action)` — filtre
+  `actionFilter`.
+- `idx_audit_logs_tenant_entity_created (tenant_id, entity, created_at
+  DESC)` — liste restreinte à l'entité preset.
+- `idx_audit_logs_preset_name ((metadata->>'preset_name')) WHERE entity
+  = 'inventory_permission_preset'` — recherche `ilike` sur le nom de
+  preset (index partiel, très compact).
+
+Les scénarios **T8.1 → T8.4** de
+`tests/rls/audit-tenant-isolation.sql` vérifient l'existence des index,
+forcent un `EXPLAIN` sur les chemins critiques et posent un garde-fou
+de performance (< 100 ms / 10k lignes en cache chaud).
+
+## Tests d'entrée (validation Zod)
+
+`tests/unit/audit-input-validation.mjs` (à lancer via `node`) prouve
+que les paramètres exposés côté client à `listPresetAudit` /
+`getPresetAuditDetail` — `tenantId`, `id`, `search`, `actionFilter`,
+`sortBy`, `sortDir`, `page`, `pageSize` — sont strictement validés :
+
+- `actionFilter` restreint à l'allow-list (`all|create|update|delete|apply`)
+  → aucune injection possible via `?actionFilter=preset.update;--`.
+- `sortBy` / `sortDir` restreints à des enums → aucun tri arbitraire.
+- `search` capé à 120 caractères et trimé.
+- `tenantId` / `id` doivent être des UUID valides → tentative de
+  probing cross-tenant via query-string rejetée avant la RLS.
+
 ## Recherche côté serveur (audit)
 
 La server function `listPresetAudit` (`src/lib/audit.functions.ts`)
