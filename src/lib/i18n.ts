@@ -277,6 +277,9 @@ const dict = {
     "perms.audit.searchPlaceholder": "Rechercher action ou preset…",
     "perms.audit.actionFilter": "Filtrer par action",
     "perms.audit.actionAll": "Toutes les actions",
+    "perms.audit.export": "Exporter CSV",
+    "perms.audit.exportOk": "Export CSV téléchargé ({n} lignes).",
+    "perms.audit.exportErr": "Échec de l'export.",
   },
   en: {
     "app.name": "Alpha ERP",
@@ -532,6 +535,9 @@ const dict = {
     "perms.audit.searchPlaceholder": "Search action or preset…",
     "perms.audit.actionFilter": "Filter by action",
     "perms.audit.actionAll": "All actions",
+    "perms.audit.export": "Export CSV",
+    "perms.audit.exportOk": "CSV export downloaded ({n} rows).",
+    "perms.audit.exportErr": "Export failed.",
   },
 } as const;
 

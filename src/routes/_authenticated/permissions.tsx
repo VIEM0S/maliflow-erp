@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, Loader2, Save, AlertTriangle, Eye, Check, X as XIcon, User, Bookmark, Trash2, Plus, Download, History, Search, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { listPresetAudit, getPresetAuditDetail } from "@/lib/audit.functions";
+import { listPresetAudit, getPresetAuditDetail, exportPresetAuditCsv } from "@/lib/audit.functions";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -315,6 +315,36 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
   }, [auditSearchInput]);
   const callList = useServerFn(listPresetAudit);
   const callDetail = useServerFn(getPresetAuditDetail);
+  const callExport = useServerFn(exportPresetAuditCsv);
+  const [exporting, setExporting] = useState(false);
+  const doExport = async () => {
+    try {
+      setExporting(true);
+      const res = await callExport({
+        data: {
+          tenantId,
+          sortBy: auditSortBy,
+          sortDir: auditSortDir,
+          search: auditSearch || undefined,
+          actionFilter: auditActionFilter,
+        },
+      });
+      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-${tenantId}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(t("perms.audit.exportOk").replace("{n}", String(res.count)));
+    } catch (e) {
+      toast.error((e as Error).message || t("perms.audit.exportErr"));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const auditQ = useQuery({
     queryKey: [
@@ -581,6 +611,17 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                 <SelectItem value="apply">{t("perms.audit.action.apply")}</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-xs"
+              onClick={doExport}
+              disabled={exporting || auditTotal === 0}
+              aria-label={t("perms.audit.export")}
+            >
+              {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+              {t("perms.audit.export")}
+            </Button>
           </div>
           {auditQ.error ? (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
