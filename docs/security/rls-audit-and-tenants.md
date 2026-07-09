@@ -170,3 +170,57 @@ propriétaire du tenant A qui injecte l'ID d'un audit du tenant B
 (récupéré hors-bande) reçoit 0 ligne : la RLS masque déjà la ligne, et
 la garde applicative `.eq("tenant_id", tenantId)` fournit une
 défense en profondeur.
+
+## Export CSV du journal d'audit
+
+La server function `exportPresetAuditCsv`
+(`src/lib/audit.functions.ts`) réutilise **exactement** le même gate
+que `listPresetAudit` :
+
+1. `requireSupabaseAuth` — le JWT est vérifié ; sinon 401.
+2. `assertAuditAccess(...,'list')` — seul un `owner` ou un
+   `super_admin` du tenant passe ; tout autre rôle déclenche un
+   enregistrement `audit.access_denied.list` via le client admin.
+3. La requête PostgREST est filtrée par `tenant_id` + `entity =
+   'inventory_permission_preset'` et applique `search` / `actionFilter`
+   avec la même validation Zod que la liste (allow-list, cap 120
+   caractères, échappement des caractères réservés).
+
+Le résultat est un CSV (colonnes : `id, created_at, action,
+preset_name, entity, entity_id, user_id`) plafonné côté serveur à
+`maxRows` (défaut 5 000, max 10 000). L'export ne sort **jamais** du
+tenant courant — la RLS `audit_select_owner` reste la garde ultime.
+
+## Benchmark de performance CI
+
+`tests/perf/audit-benchmark.mjs` mesure via `EXPLAIN (ANALYZE,
+BUFFERS)` les quatre chemins critiques (pagination par défaut, tri
+`action`, `actionFilter=update`, `ilike` sur `preset_name`) et **échoue
+en CI** si l'un dépasse son budget (100 / 120 / 150 ms). Il vérifie
+ainsi implicitement que les index ajoutés par la migration
+`..._audit_perf_indexes.sql` restent utilisés — toute régression de
+plan (index perdu, seq scan) est capturée avant d'atteindre la prod.
+
+## Tests d'accessibilité automatisés (axe)
+
+`tests/e2e/audit-a11y-axe.spec.py` injecte axe-core dans la page
+`/permissions`, ouvre le drawer d'audit, puis :
+
+- exécute axe sur le sous-arbre `[role="dialog"]` avec les règles
+  WCAG 2.0/2.1 A + AA (échoue sur toute violation) ;
+- vérifie l'`aria-labelledby` du dialog (nom accessible) ;
+- vérifie l'entrée du focus dans le dialog à l'ouverture (piège à
+  focus armé) ;
+- vérifie que `Tab` reste contenu dans le dialog ;
+- vérifie que `Escape` ferme le drawer.
+
+## Note sur le rate limiting
+
+Le backend Lovable Cloud n'expose pas de primitive de rate limiting
+standard aujourd'hui. Une limite ad-hoc dans `listPresetAudit`
+(compteur en base, jetons IP, etc.) serait fragile en environnement
+edge et non-standardisée — elle sera ajoutée quand la primitive
+partagée sera disponible. Les défenses en place restent : validation
+stricte des paramètres (Zod, allow-lists), RLS `audit_select_owner`,
+et journalisation systématique des refus (`audit.access_denied.*`)
+qui rend tout scraping visible dans le journal lui-même.
