@@ -535,6 +535,9 @@ const dict = {
     "perms.audit.searchPlaceholder": "Search action or preset…",
     "perms.audit.actionFilter": "Filter by action",
     "perms.audit.actionAll": "All actions",
+    "perms.audit.export": "Export CSV",
+    "perms.audit.exportOk": "CSV export downloaded ({n} rows).",
+    "perms.audit.exportErr": "Export failed.",
   },
 } as const;
 
