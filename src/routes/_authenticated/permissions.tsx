@@ -611,6 +611,17 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                 <SelectItem value="apply">{t("perms.audit.action.apply")}</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-xs"
+              onClick={doExport}
+              disabled={exporting || auditTotal === 0}
+              aria-label={t("perms.audit.export")}
+            >
+              {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+              {t("perms.audit.export")}
+            </Button>
           </div>
           {auditQ.error ? (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
