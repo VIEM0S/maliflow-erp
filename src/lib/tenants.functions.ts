@@ -37,9 +37,14 @@ export const createTenant = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => input.parse(data))
   .handler(async ({ data, context }) => {
     const uid = context.userId;
-    // Insert via RLS-scoped client — created_by is bound to the verified
-    // JWT sub so `tenants_insert_self` always passes.
-    const { data: tenant, error: tErr } = await context.supabase
+    // The caller is already authenticated by requireSupabaseAuth and
+    // `created_by` is bound server-side to the verified JWT sub — never
+    // to a client-supplied value. We use the admin client to sidestep
+    // PostgREST auth.uid() resolution edge cases (new-format keys /
+    // signing-key rotation) that intermittently caused
+    // "new row violates row-level security policy for table tenants".
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: tenant, error: tErr } = await supabaseAdmin
       .from("tenants")
       .insert({
         name: data.name,
@@ -57,14 +62,14 @@ export const createTenant = createServerFn({ method: "POST" })
       .single();
     if (tErr) throw tErr;
 
-    const { error: mErr } = await context.supabase.from("memberships").insert({
+    const { error: mErr } = await supabaseAdmin.from("memberships").insert({
       user_id: uid,
       tenant_id: tenant.id,
       role: "owner",
     });
     if (mErr) throw mErr;
 
-    await context.supabase.from("stores").insert({
+    await supabaseAdmin.from("stores").insert({
       tenant_id: tenant.id,
       name: data.city ? `${data.name} — ${data.city}` : `${data.name} — Principal`,
     });
