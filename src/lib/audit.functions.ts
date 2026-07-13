@@ -64,6 +64,76 @@ async function assertAuditAccess(
   throw err;
 }
 
+/**
+ * Ad-hoc sliding-window rate limit for the audit journal.
+ *
+ * IMPORTANT: This runs AFTER `assertAuditAccess`. It never widens access —
+ * an unauthorized caller is rejected (and audit-logged as `access_denied`)
+ * before we ever count a "hit". Rate limiting therefore cannot weaken the
+ * `audit_select_owner` RLS policy nor the search/actionFilter validation:
+ * the same Zod validator + tenant-scoped query still runs unchanged for
+ * every accepted request.
+ *
+ * Storage: reuses `audit_logs` (action = `audit.access.hit.<op>`) as the
+ * sliding window bucket. Per-user, per-op (list|export), 60-second window.
+ * On overflow we insert an `audit.rate_limited.<op>` record (via admin
+ * client, RLS-bypassing) with user_id, tenant_id and the observed count.
+ */
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 60; // requests per user per op per window
+
+async function assertRateLimit(
+  userId: string,
+  tenantId: string,
+  op: "list" | "export",
+): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+  const hitAction = `audit.access.hit.${op}`;
+  const { count, error } = await supabaseAdmin
+    .from("audit_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("action", hitAction)
+    .gte("created_at", since);
+  if (error) throw error;
+  const observed = count ?? 0;
+  if (observed >= RATE_LIMIT_MAX) {
+    await supabaseAdmin.from("audit_logs").insert({
+      tenant_id: tenantId,
+      user_id: userId,
+      action: `audit.rate_limited.${op}`,
+      entity: "audit_logs",
+      entity_id: null,
+      metadata: {
+        reason: "rate_limit_exceeded",
+        op,
+        window_ms: RATE_LIMIT_WINDOW_MS,
+        limit: RATE_LIMIT_MAX,
+        observed,
+      },
+    });
+    const err = new Error(
+      `Rate limit exceeded: max ${RATE_LIMIT_MAX} audit ${op} requests per ${
+        RATE_LIMIT_WINDOW_MS / 1000
+      }s`,
+    ) as Error & { statusCode?: number; code?: string; retryAfterSec?: number };
+    err.statusCode = 429;
+    err.code = "AUDIT_RATE_LIMITED";
+    err.retryAfterSec = RATE_LIMIT_WINDOW_MS / 1000;
+    throw err;
+  }
+  // Record the hit for the sliding window.
+  await supabaseAdmin.from("audit_logs").insert({
+    tenant_id: tenantId,
+    user_id: userId,
+    action: hitAction,
+    entity: "audit_logs",
+    entity_id: null,
+    metadata: { op, window_ms: RATE_LIMIT_WINDOW_MS, limit: RATE_LIMIT_MAX },
+  });
+}
+
 const listInput = z.object({
   tenantId: z.string().uuid(),
   page: z.number().int().min(0).default(0),
@@ -79,6 +149,7 @@ export const listPresetAudit = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => listInput.parse(data))
   .handler(async ({ data, context }) => {
     await assertAuditAccess(context.supabase, context.userId, data.tenantId, "list");
+    await assertRateLimit(context.userId, data.tenantId, "list");
     const from = data.page * data.pageSize;
     const to = from + data.pageSize - 1;
     let query = context.supabase
@@ -153,6 +224,7 @@ export const exportPresetAuditCsv = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => exportInput.parse(data))
   .handler(async ({ data, context }) => {
     await assertAuditAccess(context.supabase, context.userId, data.tenantId, "list");
+    await assertRateLimit(context.userId, data.tenantId, "export");
     let query = context.supabase
       .from("audit_logs")
       .select(

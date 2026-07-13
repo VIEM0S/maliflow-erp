@@ -340,7 +340,12 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
       URL.revokeObjectURL(url);
       toast.success(t("perms.audit.exportOk").replace("{n}", String(res.count)));
     } catch (e) {
-      toast.error((e as Error).message || t("perms.audit.exportErr"));
+      const err = e as Error & { code?: string; statusCode?: number };
+      if (err.code === "AUDIT_RATE_LIMITED" || err.statusCode === 429 || /rate limit/i.test(err.message || "")) {
+        toast.error(t("perms.audit.rateLimitedTitle") + " — " + t("perms.audit.rateLimitedBody"));
+      } else {
+        toast.error(err.message || t("perms.audit.exportErr"));
+      }
     } finally {
       setExporting(false);
     }
@@ -623,7 +628,33 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
               {t("perms.audit.export")}
             </Button>
           </div>
-          {auditQ.error ? (
+          {auditQ.error ? (() => {
+            const err = auditQ.error as Error & { code?: string; statusCode?: number };
+            const isRate = err.code === "AUDIT_RATE_LIMITED" || err.statusCode === 429 || /rate limit/i.test(err.message || "");
+            if (isRate) {
+              return (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs"
+                >
+                  <Loader2 className="mt-0.5 h-3.5 w-3.5 text-amber-600" />
+                  <div className="flex-1">
+                    <div className="font-medium text-amber-700">{t("perms.audit.rateLimitedTitle")}</div>
+                    <div className="text-muted-foreground">{t("perms.audit.rateLimitedBody")}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => auditQ.refetch()}
+                  >
+                    {t("perms.audit.rateLimitedRetry")}
+                  </Button>
+                </div>
+              );
+            }
+            return (
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
               <Lock className="mt-0.5 h-3.5 w-3.5" />
               <div>
@@ -631,7 +662,8 @@ function PermissionsPage({ tenantId, role }: { tenantId: string; role: AppRole }
                 <div className="text-muted-foreground">{(auditQ.error as Error).message}</div>
               </div>
             </div>
-          ) : auditQ.isLoading && !auditQ.data ? (
+            );
+          })() : auditQ.isLoading && !auditQ.data ? (
             <div className="flex items-center text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t("common.loading")}
             </div>

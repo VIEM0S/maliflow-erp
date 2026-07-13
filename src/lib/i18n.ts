@@ -280,6 +280,9 @@ const dict = {
     "perms.audit.export": "Exporter CSV",
     "perms.audit.exportOk": "Export CSV téléchargé ({n} lignes).",
     "perms.audit.exportErr": "Échec de l'export.",
+    "perms.audit.rateLimitedTitle": "Trop de requêtes",
+    "perms.audit.rateLimitedBody": "Le quota de recherche/export du journal d'audit a été atteint. Réessayez dans quelques secondes.",
+    "perms.audit.rateLimitedRetry": "Réessayer",
   },
   en: {
     "app.name": "Alpha ERP",
@@ -538,6 +541,9 @@ const dict = {
     "perms.audit.export": "Export CSV",
     "perms.audit.exportOk": "CSV export downloaded ({n} rows).",
     "perms.audit.exportErr": "Export failed.",
+    "perms.audit.rateLimitedTitle": "Too many requests",
+    "perms.audit.rateLimitedBody": "The audit log search/export quota was reached. Retry in a few seconds.",
+    "perms.audit.rateLimitedRetry": "Retry",
   },
 } as const;
 

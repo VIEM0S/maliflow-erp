@@ -49,6 +49,7 @@ psql -f tests/rls/smoke.sql
 | T5 | Rôle `anon` | Aucune ligne visible (`audit_logs`, `tenants`) |
 | T6 | Injection d'ID cross-tenant (drawer) | Charger le détail d'un audit d'un autre tenant renvoie 0 ligne, même en usurpant `tenant_id` |
 | T7 | Tentative refusée = 1 entrée `audit.access_denied` | Chaque refus crée exactement 1 ligne avec `user_id`, `tenant_id`, `reason=insufficient_permissions` |
+| T9 | Rate limit (`audit-rate-limit.sql`) | Dépassement → 1 entrée `audit.rate_limited.list` avec `reason=rate_limit_exceeded`, visible pour l'owner du tenant, invisible pour un autre tenant |
 
 Voir `docs/security/rls-audit-and-tenants.md` pour la documentation des
 politiques.
