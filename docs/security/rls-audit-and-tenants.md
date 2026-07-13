@@ -216,11 +216,44 @@ plan (index perdu, seq scan) est capturée avant d'atteindre la prod.
 
 ## Note sur le rate limiting
 
+### Limite ad-hoc (fenêtre glissante 60 s)
+
 Le backend Lovable Cloud n'expose pas de primitive de rate limiting
-standard aujourd'hui. Une limite ad-hoc dans `listPresetAudit`
-(compteur en base, jetons IP, etc.) serait fragile en environnement
-edge et non-standardisée — elle sera ajoutée quand la primitive
-partagée sera disponible. Les défenses en place restent : validation
-stricte des paramètres (Zod, allow-lists), RLS `audit_select_owner`,
-et journalisation systématique des refus (`audit.access_denied.*`)
-qui rend tout scraping visible dans le journal lui-même.
+standard. À la demande explicite du produit, une limite ad-hoc est
+implémentée dans `assertRateLimit` (`src/lib/audit.functions.ts`) —
+`RATE_LIMIT_MAX = 60` requêtes par utilisateur, par opération
+(`list` ou `export`), sur une fenêtre glissante de 60 s. Le compteur
+utilise `audit_logs` comme bucket (`action = 'audit.access.hit.<op>'`)
+écrit via le client admin.
+
+**Ordre d'exécution — pas de contournement RLS** :
+
+1. `requireSupabaseAuth` (JWT vérifié, sinon 401).
+2. `assertAuditAccess` (owner/super_admin, sinon 403 +
+   `audit.access_denied.*`).
+3. `assertRateLimit` — s'exécute **après** l'auth et le contrôle de
+   rôle ; un appelant non autorisé n'atteint jamais le compteur, donc
+   la limite ne peut ni élargir l'accès ni masquer un refus.
+
+Les mêmes filtres `search` / `actionFilter` (allow-list Zod) et la
+même clause tenant-scoped continuent à s'appliquer sans changement à
+chaque requête acceptée — la RLS `audit_select_owner` reste la garde
+ultime.
+
+**Dépassement** : `assertRateLimit` insère une entrée
+`audit.rate_limited.<op>` avec `user_id`, `tenant_id`,
+`reason=rate_limit_exceeded`, `limit`, `observed`, puis lève une
+erreur `code=AUDIT_RATE_LIMITED / statusCode=429`. L'UI
+(`src/routes/_authenticated/permissions.tsx`) affiche une carte i18n
+dédiée (`perms.audit.rateLimitedTitle/Body`) avec un bouton
+**Réessayer** qui rejoue la requête.
+
+### Test d'intégration
+
+`tests/rls/audit-rate-limit.sql` (scénario **T9**) :
+
+- injecte 61 hits + 1 refus pour l'owner du tenant A ;
+- vérifie que l'owner voit exactement 1 entrée `rate_limited` avec
+  `reason=rate_limit_exceeded` ;
+- vérifie qu'aucune ligne n'est visible pour l'owner du tenant B
+  (isolation cross-tenant conservée sous rate limit).
