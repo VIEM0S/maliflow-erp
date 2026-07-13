@@ -541,6 +541,9 @@ const dict = {
     "perms.audit.export": "Export CSV",
     "perms.audit.exportOk": "CSV export downloaded ({n} rows).",
     "perms.audit.exportErr": "Export failed.",
+    "perms.audit.rateLimitedTitle": "Too many requests",
+    "perms.audit.rateLimitedBody": "The audit log search/export quota was reached. Retry in a few seconds.",
+    "perms.audit.rateLimitedRetry": "Retry",
   },
 } as const;
 
